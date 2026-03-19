@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Filing Instructions — {{ petition.petition_id }}{% endblock %}
+{% block content %}
+<h1>Filing Instructions</h1>
+<p class="subtitle">{{ petition.current_legal_name }} &rarr; {{ petition.desired_name }}</p>
+
+{% if instructions %}
+<div class="card">
+  <h2>Filing Method: {{ instructions.method | upper }}</h2>
+  <dl>
+    <dt>Court</dt>
+    <dd>{{ instructions.court_name }}</dd>
+    <dt>Address</dt>
+    <dd>{{ instructions.court_address }}</dd>
+    <dt>Phone</dt>
+    <dd>{{ instructions.court_phone }}</dd>
+    <dt>Filing Fee</dt>
+    <dd>${{ "%.2f" | format(instructions.filing_fee) }}</dd>
+    <dt>Payment Methods</dt>
+    <dd>{{ instructions.payment_methods | join(', ') }}</dd>
+    {% if instructions.efiling_url %}
+    <dt>E-filing Portal</dt>
+    <dd><a href="{{ instructions.efiling_url }}" target="_blank">{{ instructions.efiling_url }}</a></dd>
+    {% endif %}
+    <dt>Estimated Timeline</dt>
+    <dd>{{ instructions.estimated_timeline }}</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h2>Steps</h2>
+  <ol>
+    {% for step in instructions.steps %}
+      <li style="margin-bottom: 8px;">{{ step }}</li>
+    {% endfor %}
+  </ol>
+</div>
+
+<div class="card">
+  <h2>Fingerprint / Background Check</h2>
+  <p style="white-space: pre-line;">{{ instructions.fingerprint_info }}</p>
+</div>
+{% endif %}
+
+{% if timeline %}
+<div class="card">
+  <h2>Key Deadlines</h2>
+  <table>
+    <thead><tr><th>Status</th><th>Date</th><th>Item</th><th>Notes</th></tr></thead>
+    <tbody>
+      {% for d in timeline.deadlines | sort(attribute='due_date') %}
+      <tr>
+        <td>
+          {% if d.completed %}
+            <span class="badge badge-green">Done</span>
+          {% elif d.due_date < today %}
+            <span class="badge badge-red">Overdue</span>
+          {% else %}
+            <span class="badge badge-yellow">Pending</span>
+          {% endif %}
+        </td>
+        <td>{{ d.due_date.isoformat() }}</td>
+        <td>{{ d.label }}</td>
+        <td class="hint">{{ d.notes }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<a href="{{ url_for('main.status', petition_id=petition.petition_id) }}" class="btn">
+  Next: Status Dashboard
+</a>
+{% endblock %}

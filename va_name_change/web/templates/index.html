@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Virginia Name Change — Home{% endblock %}
+{% block content %}
+<h1>Virginia Name Change Assistant</h1>
+<p class="subtitle">A guided, step-by-step process for filing a legal name change in the Commonwealth of Virginia.</p>
+
+<div class="card">
+  <h2>Start a New Petition</h2>
+  <p>We'll walk you through collecting your information, generating all required court forms,
+     filing instructions, and a checklist for updating your identity everywhere.</p>
+  <a href="{{ url_for('main.intake_step1') }}" class="btn">Begin Name Change Process</a>
+</div>
+
+{% if petitions %}
+<div class="card">
+  <h2>Your Petitions</h2>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Name</th><th>Status</th><th>Created</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for p in petitions %}
+      <tr>
+        <td><code>{{ p.petition_id }}</code></td>
+        <td>{{ p.current_legal_name }} &rarr; {{ p.desired_name }}</td>
+        <td><span class="badge badge-blue">{{ p.status.value }}</span></td>
+        <td>{{ p.created_at.strftime('%Y-%m-%d') }}</td>
+        <td><a href="{{ url_for('main.status', petition_id=p.petition_id) }}" class="btn btn-sm btn-secondary">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

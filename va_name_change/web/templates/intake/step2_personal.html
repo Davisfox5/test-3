@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Step 2 — Personal Info{% endblock %}
+{% block content %}
+<div class="steps">
+  <div class="step done">1. Identity</div>
+  <div class="step active">2. Personal</div>
+  <div class="step">3. Address</div>
+  <div class="step">4. Confirm</div>
+</div>
+
+<div class="card">
+  <h2>Step 2: Personal Information</h2>
+
+  <form method="POST">
+    <label for="dob">Date of Birth</label>
+    <input type="text" id="dob" name="dob" value="{{ dob }}"
+           placeholder="MM/DD/YYYY" required>
+    <p class="hint">Format: MM/DD/YYYY or YYYY-MM-DD</p>
+
+    <label for="ssn">Social Security Number</label>
+    <input type="password" id="ssn" name="ssn" value="{{ ssn }}"
+           placeholder="123-45-6789" required>
+    <p class="hint">Your SSN is encrypted before storage and never displayed in full.</p>
+
+    <a href="{{ url_for('main.intake_step1') }}" class="btn btn-secondary">Back</a>
+    <button type="submit" class="btn">Continue to Step 3</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Documents — {{ petition.petition_id }}{% endblock %}
+{% block content %}
+<h1>Generated Documents</h1>
+<p class="subtitle">Petition {{ petition.petition_id }} &mdash; {{ petition.current_legal_name }} &rarr; {{ petition.desired_name }}</p>
+
+<div class="card">
+  <p>The following documents have been generated for your name change petition.
+     Please download, review, and sign where indicated before filing.</p>
+
+  <table>
+    <thead>
+      <tr><th>Document</th><th>Generated</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for doc in petition.documents %}
+      <tr>
+        <td>{{ doc.doc_type.value }}</td>
+        <td>{{ doc.generated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>
+          {% set fname = doc.file_path.split('/')[-1] %}
+          <a href="{{ url_for('main.download_document', petition_id=petition.petition_id, filename=fname) }}"
+             class="btn btn-sm">Download</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<a href="{{ url_for('main.filing', petition_id=petition.petition_id) }}" class="btn">
+  Next: View Filing Instructions
+</a>
+{% endblock %}

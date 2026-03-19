@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Step 4 — Confirm{% endblock %}
+{% block content %}
+<div class="steps">
+  <div class="step done">1. Identity</div>
+  <div class="step done">2. Personal</div>
+  <div class="step done">3. Address</div>
+  <div class="step active">4. Confirm</div>
+</div>
+
+<div class="card">
+  <h2>Step 4: Review &amp; Confirm</h2>
+  <p>Please verify all information below is correct before proceeding.</p>
+
+  <dl>
+    <dt>Current Legal Name</dt>
+    <dd>{{ data.current_name }}</dd>
+
+    <dt>Desired New Name</dt>
+    <dd>{{ data.desired_name }}</dd>
+
+    <dt>Reason</dt>
+    <dd>{{ data.reason }}</dd>
+
+    <dt>Date of Birth</dt>
+    <dd>{{ data.dob }}</dd>
+
+    <dt>SSN</dt>
+    <dd>***-**-{{ data.ssn_last4 }}</dd>
+
+    <dt>Address</dt>
+    <dd>{{ data.street }}, {{ data.city }}, VA {{ data.zip_code }}</dd>
+
+    <dt>Jurisdiction</dt>
+    <dd>{{ data.county | title }}</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h2>Your Circuit Court</h2>
+  <dl>
+    <dt>Court</dt>
+    <dd>{{ court.name }}</dd>
+
+    <dt>Address</dt>
+    <dd>{{ court.address.street }}, {{ court.address.city }}, VA {{ court.address.zip_code }}</dd>
+
+    <dt>Phone</dt>
+    <dd>{{ court.phone }}</dd>
+
+    <dt>Filing Fee</dt>
+    <dd>${{ "%.2f" | format(court.filing_fee_usd) }}</dd>
+
+    <dt>E-filing Available</dt>
+    <dd>{{ "Yes" if court.accepts_efiling else "No — in-person or mail filing required" }}</dd>
+  </dl>
+
+  <form method="POST">
+    <a href="{{ url_for('main.intake_step3') }}" class="btn btn-secondary">Back</a>
+    <button type="submit" class="btn btn-success">Confirm &amp; Generate Documents</button>
+  </form>
+</div>
+{% endblock %}

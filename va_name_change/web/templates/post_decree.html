@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Post-Decree Updates — {{ petition.petition_id }}{% endblock %}
+{% block content %}
+<h1>Post-Decree Updates</h1>
+<p class="subtitle">Work through each tier in order. Items within a tier can be done in parallel.</p>
+
+{% set completed_agencies = [] %}
+{% for u in petition.downstream_updates %}
+  {% if u.status.value == "completed" %}
+    {% if completed_agencies.append(u.agency) %}{% endif %}
+  {% endif %}
+{% endfor %}
+
+{% for tier in plan %}
+<div class="tier">
+  <h3>Tier {{ loop.index }}
+    {% if loop.index == 1 %}<span class="hint"> — Start here</span>{% endif %}
+  </h3>
+
+  {% for action in tier %}
+  <div class="card" style="{% if action.agency in completed_agencies %}opacity: 0.6;{% endif %}">
+    <h3 style="margin-top:0;">
+      {{ action.agency }}
+      {% if action.agency in completed_agencies %}
+        <span class="badge badge-green">Complete</span>
+      {% endif %}
+    </h3>
+
+    <ol>
+      {% for step in action.instructions %}
+        <li>{{ step }}</li>
+      {% endfor %}
+    </ol>
+
+    <p><strong>Documents needed:</strong> {{ action.required_documents | join(', ') }}</p>
+    {% if action.website %}
+      <p><strong>Website:</strong> <a href="{{ action.website }}" target="_blank">{{ action.website }}</a></p>
+    {% endif %}
+
+    {% if action.agency not in completed_agencies %}
+    <form method="POST" action="{{ url_for('main.complete_update', petition_id=petition.petition_id) }}" style="display:inline;">
+      <input type="hidden" name="agency" value="{{ action.agency }}">
+      <button type="submit" class="btn btn-sm btn-success">Mark Complete</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+
+<a href="{{ url_for('main.status', petition_id=petition.petition_id) }}" class="btn btn-secondary">Back to Status</a>
+{% endblock %}

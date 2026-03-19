@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Status — {{ petition.petition_id }}{% endblock %}
+{% block content %}
+<h1>Petition Status</h1>
+<p class="subtitle">{{ petition.current_legal_name }} &rarr; {{ petition.desired_name }}
+  &mdash; <span class="badge badge-blue">{{ petition.status.value }}</span></p>
+
+{% set ordered = ["intake", "forms_ready", "filed", "hearing_scheduled", "granted", "post_decree_in_progress", "completed"] %}
+<div class="pipeline">
+  {% for s in ordered %}
+    {% if s == petition.status.value %}
+      <div class="stage current">{{ s | replace("_", " ") | title }}</div>
+    {% elif ordered.index(s) < ordered.index(petition.status.value) %}
+      <div class="stage passed">{{ s | replace("_", " ") | title }}</div>
+    {% else %}
+      <div class="stage">{{ s | replace("_", " ") | title }}</div>
+    {% endif %}
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>Advance Status</h2>
+  <p>Use the buttons below to record milestones as they occur.</p>
+
+  <form method="POST" action="{{ url_for('main.advance_status', petition_id=petition.petition_id) }}" style="display: flex; gap: 8px; flex-wrap: wrap;">
+    {% if petition.status.value == "filed" %}
+      <button type="submit" name="target_status" value="hearing_scheduled" class="btn btn-sm">Hearing Scheduled</button>
+    {% elif petition.status.value == "hearing_scheduled" %}
+      <button type="submit" name="target_status" value="granted" class="btn btn-sm btn-success">Granted</button>
+      <button type="submit" name="target_status" value="denied" class="btn btn-sm" style="background:#dc2626;">Denied</button>
+    {% elif petition.status.value == "granted" %}
+      <button type="submit" name="target_status" value="post_decree_in_progress" class="btn btn-sm">Begin Post-Decree Updates</button>
+    {% elif petition.status.value == "forms_ready" %}
+      <p class="hint">Next step: <a href="{{ url_for('main.filing', petition_id=petition.petition_id) }}">review filing instructions</a>.</p>
+    {% elif petition.status.value == "completed" %}
+      <p class="hint">Your name change process is complete.</p>
+    {% elif petition.status.value == "denied" %}
+      <p class="hint">The petition was denied. Please consult an attorney for next steps.</p>
+    {% endif %}
+  </form>
+</div>
+
+{% if timeline %}
+<div class="card">
+  <h2>Timeline</h2>
+  <table>
+    <thead><tr><th></th><th>Date</th><th>Milestone</th></tr></thead>
+    <tbody>
+      {% for d in timeline.deadlines | sort(attribute='due_date') %}
+      <tr>
+        <td>{% if d.completed %}<span class="badge badge-green">Done</span>{% else %}<span class="badge badge-gray">Pending</span>{% endif %}</td>
+        <td>{{ d.due_date.isoformat() }}</td>
+        <td>{{ d.label }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if petition.status.value in ("granted", "post_decree_in_progress") %}
+<a href="{{ url_for('main.post_decree', petition_id=petition.petition_id) }}" class="btn">
+  View Post-Decree Checklist
+</a>
+{% endif %}
+{% endblock %}

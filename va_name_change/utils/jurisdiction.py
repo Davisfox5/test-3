@@ -149,6 +149,103 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         filing_fee_usd=53.00,
         accepts_efiling=True,
     ),
+    # -------------------------------------------------------------------
+    # Roanoke metro area
+    # -------------------------------------------------------------------
+    "roanoke city": CircuitCourt(
+        name="Roanoke City Circuit Court",
+        fips_code="770",
+        address=Address(
+            street="315 Church Ave SW",
+            city="Roanoke",
+            zip_code="24016",
+            county="Roanoke City",
+        ),
+        phone="(540) 853-6702",
+        filing_fee_usd=53.00,
+        accepts_efiling=False,
+        local_rules_url="https://www.vacourts.gov/courts/circuit/Roanoke_City/home.html",
+    ),
+    "roanoke county": CircuitCourt(
+        name="Roanoke County Circuit Court",
+        fips_code="161",
+        address=Address(
+            street="305 E Main St",
+            city="Salem",
+            zip_code="24153",
+            county="Roanoke County",
+        ),
+        phone="(540) 387-6205",
+        filing_fee_usd=53.00,
+        accepts_efiling=False,
+        local_rules_url="https://www.vacourts.gov/courts/circuit/Roanoke_County/home.html",
+    ),
+    "salem": CircuitCourt(
+        name="Salem Circuit Court",
+        fips_code="775",
+        address=Address(
+            street="2 E Calhoun St",
+            city="Salem",
+            zip_code="24153",
+            county="Salem",
+        ),
+        phone="(540) 375-3067",
+        filing_fee_usd=53.00,
+        accepts_efiling=False,
+        local_rules_url="https://www.vacourts.gov/courts/circuit/Salem/home.html",
+    ),
+    "botetourt": CircuitCourt(
+        name="Botetourt County Circuit Court",
+        fips_code="023",
+        address=Address(
+            street="1 W Main St",
+            city="Fincastle",
+            zip_code="24090",
+            county="Botetourt",
+        ),
+        phone="(540) 473-8274",
+        filing_fee_usd=53.00,
+        accepts_efiling=False,
+    ),
+    "craig": CircuitCourt(
+        name="Craig County Circuit Court",
+        fips_code="045",
+        address=Address(
+            street="182 Main St",
+            city="New Castle",
+            zip_code="24127",
+            county="Craig",
+        ),
+        phone="(540) 864-6141",
+        filing_fee_usd=53.00,
+        accepts_efiling=False,
+    ),
+    "franklin county": CircuitCourt(
+        name="Franklin County Circuit Court",
+        fips_code="067",
+        address=Address(
+            street="275 S Main St",
+            city="Rocky Mount",
+            zip_code="24151",
+            county="Franklin County",
+        ),
+        phone="(540) 483-3065",
+        filing_fee_usd=53.00,
+        accepts_efiling=False,
+    ),
+    "bedford county": CircuitCourt(
+        name="Bedford County Circuit Court",
+        fips_code="019",
+        address=Address(
+            street="123 E Main St",
+            city="Bedford",
+            zip_code="24523",
+            county="Bedford County",
+        ),
+        phone="(540) 586-7632",
+        filing_fee_usd=53.00,
+        accepts_efiling=False,
+    ),
 }
 
 

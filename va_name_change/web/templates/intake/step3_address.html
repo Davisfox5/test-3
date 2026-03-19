@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Step 3 — Address{% endblock %}
+{% block content %}
+<div class="steps">
+  <div class="step done">1. Identity</div>
+  <div class="step done">2. Personal</div>
+  <div class="step active">3. Address</div>
+  <div class="step">4. Confirm</div>
+</div>
+
+<div class="card">
+  <h2>Step 3: Virginia Address</h2>
+  <p class="hint">Your petition will be filed in the circuit court for the county or independent city where you reside.</p>
+
+  <form method="POST">
+    <label for="street">Street Address</label>
+    <input type="text" id="street" name="street" value="{{ street }}" required>
+
+    <label for="city">City</label>
+    <input type="text" id="city" name="city" value="{{ city }}" required>
+
+    <label for="county">County or Independent City</label>
+    <select id="county" name="county" required>
+      <option value="">— Select your jurisdiction —</option>
+      {% for j in jurisdictions %}
+        <option value="{{ j }}" {{ 'selected' if county.lower() == j }}>{{ j.title() }}</option>
+      {% endfor %}
+    </select>
+    <p class="hint">If you live in an independent city (e.g. Roanoke City, Salem, Richmond City), select it here.</p>
+
+    <label for="zip_code">ZIP Code</label>
+    <input type="text" id="zip_code" name="zip_code" value="{{ zip_code }}"
+           placeholder="24016" required>
+
+    <a href="{{ url_for('main.intake_step2') }}" class="btn btn-secondary">Back</a>
+    <button type="submit" class="btn">Continue to Step 4</button>
+  </form>
+</div>
+{% endblock %}
