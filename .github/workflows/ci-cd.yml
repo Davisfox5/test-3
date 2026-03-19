@@ -6,6 +6,8 @@ permissions:
 on:
   push:
     branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -14,13 +16,6 @@ jobs:
 
     env:
       OPENAI_API_KEY_DECLAN: ${{ secrets.OPENAI_API_KEY_DECLAN }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      SKYVERN_API_KEY: ${{ secrets.SKYVERN_API_KEY }}
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_SECRET: ${{ secrets.AZURE_SECRET }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
 
     steps:
       - name: "Check out code"
@@ -28,33 +23,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: "List initial files"
-        run: ls -la
-
       - name: "Set up Python"
         uses: actions/setup-python@v4
         with:
-          python-version: "3.9"
+          python-version: "3.11"
 
       - name: "Install dependencies"
         run: |
           pip install --upgrade pip
-          pip install requests pytest
-          pip install "openai==0.28.*"   # pinned for orchestrator
-
-      - name: "Verify test file & final listing"
-        run: |
-          echo "Final listing before tests:"
-          ls -la
-          if [ ! -f tests/test_basic.py ]; then
-            echo "[WARNING] tests/test_basic.py is missing!"
-          else
-            echo "tests/test_basic.py is present."
-          fi
+          pip install -r requirements.txt
+          pip install "openai==0.28.*"   # pinned for self-healing orchestrator
 
       - name: "Run tests & capture logs"
         run: |
-          pytest --maxfail=1 --disable-warnings -q 2>&1 | tee test_output.log
+          pytest tests/ --maxfail=3 --disable-warnings -v 2>&1 | tee test_output.log
           exit_code=${PIPESTATUS[0]}
           if [ $exit_code -ne 0 ]; then
             echo "[pytest logs]" > fail_logs.txt
@@ -69,17 +51,21 @@ jobs:
           git config user.name "SelfHealBot"
           git config user.email "selfheal@bot.com"
 
-          # We also cat app.py + tests/*.py into fail_logs so GPT sees them
-          if [ -f app.py ]; then
-            echo "\n[APP.PY CODE BELOW]:" >> fail_logs.txt
-            cat app.py >> fail_logs.txt
-          fi
-          if [ -d tests ]; then
-            for f in tests/*.py; do
-              echo "\n[TEST FILE: $f]:" >> fail_logs.txt
-              cat "$f" >> fail_logs.txt
-            done
-          fi
+          # Append source code and tests into fail_logs for context
+          echo "" >> fail_logs.txt
+          echo "[SOURCE FILES BELOW]:" >> fail_logs.txt
+          for f in $(find va_name_change -name '*.py' -type f); do
+            echo "" >> fail_logs.txt
+            echo "=== $f ===" >> fail_logs.txt
+            cat "$f" >> fail_logs.txt
+          done
+          echo "" >> fail_logs.txt
+          echo "[TEST FILES BELOW]:" >> fail_logs.txt
+          for f in tests/*.py; do
+            echo "" >> fail_logs.txt
+            echo "=== $f ===" >> fail_logs.txt
+            cat "$f" >> fail_logs.txt
+          done
 
           git add fail_logs.txt
           git commit -m "Add fail_logs with code & logs" || echo "No changes to commit"
@@ -94,4 +80,4 @@ jobs:
           git push --force origin main
 
           # re-run tests once
-          pytest --maxfail=1 --disable-warnings -q || echo "Still failing..."
+          pytest tests/ --maxfail=3 --disable-warnings -v || echo "Still failing..."

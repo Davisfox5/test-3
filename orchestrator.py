@@ -1,64 +1,93 @@
 #!/usr/bin/env python3
 """
-child_repo/orchestrator.py
+orchestrator.py — GPT-based self-healing pipeline.
 
-Pinned to openai==0.28.* so the pipeline can do self-healing:
- - reads fail_logs.txt from the last failing test
- - calls GPT with logs + the entire "app.py" + tests
- - attempts to fix "app.py"
+Reads fail_logs.txt (populated by CI on test failure), sends context to GPT-4,
+and applies suggested fixes to the va_name_change package source files.
 """
 
 import os
-import openai
 import re
+import openai
+
+
+TARGET_DIRS = ["va_name_change", "tests"]
+
+
+def _collect_source_files():
+    """Collect all Python source files from target directories."""
+    files = {}
+    for d in TARGET_DIRS:
+        if not os.path.isdir(d):
+            continue
+        for root, _, filenames in os.walk(d):
+            for fn in filenames:
+                if fn.endswith(".py"):
+                    path = os.path.join(root, fn)
+                    with open(path, "r", encoding="utf-8") as f:
+                        files[path] = f.read()
+    return files
+
 
 def main():
     openai.api_key = os.getenv("OPENAI_API_KEY_DECLAN", "")
     if not openai.api_key:
-        print("[child orchestrator] No OPENAI_API_KEY_DECLAN, cannot do self-healing.")
+        print("[orchestrator] No OPENAI_API_KEY_DECLAN, cannot do self-healing.")
         return
 
-    LOG_FILE = "fail_logs.txt"
-    if not os.path.exists(LOG_FILE):
-        print(f"[child orchestrator] {LOG_FILE} not found, nothing to fix.")
+    log_file = "fail_logs.txt"
+    if not os.path.exists(log_file):
+        print(f"[orchestrator] {log_file} not found, nothing to fix.")
         return
 
-    with open(LOG_FILE, "r") as f:
+    with open(log_file, "r") as f:
         logs = f.read()
 
-    system_msg = "You fix Python code. Return the entire new app.py in triple-backticks if you can fix it."
-    user_msg = f"""
-The following text includes fail logs, plus code for app.py (and any tests). 
-Return an updated 'app.py' in triple-backtick python code blocks if you see a fix:
---------------------------------
-{logs}
-"""
+    system_msg = (
+        "You are a Python debugging assistant. You will receive pytest failure logs "
+        "and source code for a Virginia name-change agent application. "
+        "Identify the root cause and return ONLY the fixed file(s). "
+        "For each file, use the format:\n"
+        "--- FILE: path/to/file.py ---\n"
+        "```python\n<entire corrected file>\n```\n"
+        "Only include files that need changes."
+    )
 
-    # GPT call
+    user_msg = f"Fix the following test failures:\n\n{logs}"
+
     try:
         resp = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg}
+                {"role": "user", "content": user_msg},
             ],
-            temperature=0.3
+            temperature=0.3,
         )
         suggestions = resp["choices"][0]["message"]["content"]
-        print("[child orchestrator] GPT suggestions:\n", suggestions)
+        print("[orchestrator] GPT suggestions:\n", suggestions)
     except Exception as e:
-        print(f"[child orchestrator] GPT call failed: {e}")
+        print(f"[orchestrator] GPT call failed: {e}")
         return
 
-    # Attempt to parse triple-backtick code
-    code_match = re.search(r"```python\s*(.*?)```", suggestions, re.DOTALL)
-    if code_match:
-        new_code = code_match.group(1).strip()
-        with open("app.py", "w", encoding="utf-8") as f:
-            f.write(new_code)
-        print("[child orchestrator] Overwrote app.py from GPT fix.")
+    # Parse --- FILE: path --- blocks with triple-backtick code
+    file_pattern = re.compile(
+        r"---\s*FILE:\s*([\w/._-]+)\s*---\s*```python\s*(.*?)```",
+        re.DOTALL,
+    )
+    matches = file_pattern.findall(suggestions)
+
+    if matches:
+        for filepath, code in matches:
+            filepath = filepath.strip()
+            code = code.strip()
+            os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(code)
+            print(f"[orchestrator] Wrote fix to {filepath}")
     else:
-        print("[child orchestrator] No triple-backtick code block found or no fix identified. No changes made.")
+        print("[orchestrator] No file blocks found in GPT response. No changes made.")
+
 
 if __name__ == "__main__":
     main()
