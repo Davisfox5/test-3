@@ -103,6 +103,7 @@ class NameChangePetition:
     desired_name: str = ""
     reason: str = ""
     dob: Optional[date] = None
+    place_of_birth: str = ""
     ssn_encrypted: str = ""          # stored encrypted; never logged
     address: Optional[Address] = None
     jurisdiction: Optional[CircuitCourt] = None

@@ -119,12 +119,15 @@ def intake_step2():
 
     if request.method == "POST":
         dob_raw = request.form.get("dob", "").strip()
+        pob_raw = request.form.get("place_of_birth", "").strip()
         ssn_raw = request.form.get("ssn", "").strip()
 
         errors = []
         dob = _parse_date(dob_raw)
         if not dob:
             errors.append("Date of birth must be MM/DD/YYYY or YYYY-MM-DD.")
+        if not pob_raw:
+            errors.append("Place of birth is required.")
         if not _SSN_RE.match(ssn_raw):
             errors.append("SSN must be in the format 123-45-6789 or 123456789.")
 
@@ -132,9 +135,10 @@ def intake_step2():
             for e in errors:
                 flash(e, "error")
             return render_template("intake/step2_personal.html",
-                                   dob=dob_raw, ssn=ssn_raw)
+                                   dob=dob_raw, place_of_birth=pob_raw, ssn=ssn_raw)
 
         session["intake"]["dob"] = dob.isoformat()
+        session["intake"]["place_of_birth"] = pob_raw
         session["intake"]["ssn_last4"] = ssn_raw.replace("-", "")[-4:]
         session["intake"]["ssn_encrypted"] = encrypt(ssn_raw.replace("-", ""))
         session.modified = True
@@ -142,7 +146,9 @@ def intake_step2():
 
     data = session.get("intake", {})
     return render_template("intake/step2_personal.html",
-                           dob=data.get("dob", ""), ssn="")
+                           dob=data.get("dob", ""),
+                           place_of_birth=data.get("place_of_birth", ""),
+                           ssn="")
 
 
 @bp.route("/intake/step3", methods=["GET", "POST"])
@@ -217,6 +223,7 @@ def intake_step4():
             desired_name=data["desired_name"],
             reason=data["reason"],
             dob=date.fromisoformat(data["dob"]),
+            place_of_birth=data.get("place_of_birth", ""),
             ssn_encrypted=data["ssn_encrypted"],
             address=addr,
             jurisdiction=court,
