@@ -110,6 +110,7 @@
       <a href="{{ url_for('main.index') }}">Home</a>
       {% if session.get('petition_id') %}
         {% set pid = session.petition_id %}
+        <a href="{{ url_for('main.dashboard', petition_id=pid) }}">Dashboard</a>
         <a href="{{ url_for('main.documents', petition_id=pid) }}">Documents</a>
         <a href="{{ url_for('main.filing', petition_id=pid) }}">Filing</a>
         <a href="{{ url_for('main.status', petition_id=pid) }}">Status</a>

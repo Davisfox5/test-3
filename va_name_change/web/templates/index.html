@@ -25,7 +25,7 @@
         <td>{{ p.current_legal_name }} &rarr; {{ p.desired_name }}</td>
         <td><span class="badge badge-blue">{{ p.status.value }}</span></td>
         <td>{{ p.created_at.strftime('%Y-%m-%d') }}</td>
-        <td><a href="{{ url_for('main.status', petition_id=p.petition_id) }}" class="btn btn-sm btn-secondary">View</a></td>
+        <td><a href="{{ url_for('main.dashboard', petition_id=p.petition_id) }}" class="btn btn-sm btn-secondary">Dashboard</a></td>
       </tr>
       {% endfor %}
     </tbody>

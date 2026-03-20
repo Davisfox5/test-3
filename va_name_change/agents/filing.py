@@ -44,19 +44,15 @@ def _fingerprint_guidance(petition: NameChangePetition) -> str:
     """).strip()
 
 
-def prepare_filing(petition: NameChangePetition) -> FilingInstructions:
-    """Analyse the petition and produce step-by-step filing instructions.
-
-    This is a human-in-the-loop checkpoint: the petitioner reviews the
-    instructions and confirms before any submission occurs.
-    """
+def get_filing_instructions(petition: NameChangePetition) -> FilingInstructions:
+    """Build filing instructions without changing petition status."""
     court = petition.jurisdiction
     assert court is not None
 
     fingerprint_info = _fingerprint_guidance(petition)
 
     if court.accepts_efiling:
-        instructions = FilingInstructions(
+        return FilingInstructions(
             method="efiling",
             steps=[
                 f"Navigate to the Virginia OCRA e-filing portal for {court.name}.",
@@ -80,7 +76,7 @@ def prepare_filing(petition: NameChangePetition) -> FilingInstructions:
             estimated_timeline="Typically 4-8 weeks from filing to hearing.",
         )
     else:
-        instructions = FilingInstructions(
+        return FilingInstructions(
             method="in_person",
             steps=[
                 f"Print all documents from your output folder.",
@@ -105,6 +101,10 @@ def prepare_filing(petition: NameChangePetition) -> FilingInstructions:
             estimated_timeline="Typically 6-12 weeks from filing to hearing.",
         )
 
+
+def prepare_filing(petition: NameChangePetition) -> FilingInstructions:
+    """Build filing instructions and advance petition status to FILED."""
+    instructions = get_filing_instructions(petition)
     petition.advance(PetitionStatus.FILED)
     return instructions
 

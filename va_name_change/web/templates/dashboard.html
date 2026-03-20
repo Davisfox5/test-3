@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — {{ petition.petition_id }}{% endblock %}
+{% block content %}
+<h1>{{ petition.current_legal_name }} &rarr; {{ petition.desired_name }}</h1>
+<p class="subtitle">Petition {{ petition.petition_id }} &middot; Created {{ petition.created_at.strftime('%B %d, %Y') }}</p>
+
+{# ── Pipeline progress bar ── #}
+{% set ordered = ["intake", "forms_ready", "filed", "hearing_scheduled", "granted", "post_decree_in_progress", "completed"] %}
+{% set labels  = {"intake": "Intake", "forms_ready": "Forms Ready", "filed": "Filed",
+                  "hearing_scheduled": "Hearing", "granted": "Granted",
+                  "post_decree_in_progress": "Post-Decree", "completed": "Complete"} %}
+<div class="pipeline">
+  {% set current_idx = ordered.index(petition.status.value) if petition.status.value in ordered else -1 %}
+  {% for s in ordered %}
+    {% if petition.status.value == "denied" and s == "hearing_scheduled" %}
+      <div class="stage" style="background:#dc2626;color:#fff;">Denied</div>
+    {% elif s == petition.status.value %}
+      <div class="stage current">{{ labels[s] }}</div>
+    {% elif current_idx >= 0 and ordered.index(s) < current_idx %}
+      <div class="stage passed">{{ labels[s] }}</div>
+    {% else %}
+      <div class="stage">{{ labels[s] }}</div>
+    {% endif %}
+  {% endfor %}
+</div>
+
+{# ── SECTION 1: Documents ── #}
+{% if petition.documents %}
+<div class="card">
+  <h2>Your Documents</h2>
+  <p>All forms have been auto-generated and pre-filled with your information. Download, review, and sign where indicated.</p>
+  <table>
+    <thead><tr><th>Document</th><th>Generated</th><th></th></tr></thead>
+    <tbody>
+      {% for doc in petition.documents %}
+      <tr>
+        <td>{{ doc.doc_type.value }}</td>
+        <td>{{ doc.generated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>
+          {% set fname = doc.file_path.replace('\\', '/').split('/')[-1] %}
+          <a href="{{ url_for('main.download_document', petition_id=petition.petition_id, filename=fname) }}"
+             class="btn btn-sm">Download</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# ── SECTION 2: Filing Instructions ── #}
+{% if instructions %}
+<div class="card">
+  <h2>Filing Instructions — {{ instructions.method | upper }}</h2>
+  <dl>
+    <dt>Court</dt><dd>{{ instructions.court_name }}</dd>
+    <dt>Address</dt><dd>{{ instructions.court_address }}</dd>
+    <dt>Phone</dt><dd>{{ instructions.court_phone }}</dd>
+    <dt>Filing Fee</dt><dd>${{ "%.2f" | format(instructions.filing_fee) }}</dd>
+    <dt>Payment</dt><dd>{{ instructions.payment_methods | join(', ') }}</dd>
+    {% if instructions.efiling_url %}
+    <dt>E-filing Portal</dt>
+    <dd><a href="{{ instructions.efiling_url }}" target="_blank">{{ instructions.efiling_url }}</a></dd>
+    {% endif %}
+    <dt>Timeline</dt><dd>{{ instructions.estimated_timeline }}</dd>
+  </dl>
+
+  <h3 style="margin-top:20px;">Steps</h3>
+  <ol>
+    {% for step in instructions.steps %}
+      <li style="margin-bottom:6px;">{{ step }}</li>
+    {% endfor %}
+  </ol>
+
+  <h3>Fingerprint / Background Check</h3>
+  <p style="white-space:pre-line;">{{ instructions.fingerprint_info }}</p>
+</div>
+{% endif %}
+
+{# ── SECTION 3: Key Deadlines ── #}
+{% if timeline %}
+<div class="card">
+  <h2>Key Deadlines</h2>
+  <table>
+    <thead><tr><th>Status</th><th>Date</th><th>Milestone</th><th>Notes</th></tr></thead>
+    <tbody>
+      {% for d in timeline.deadlines | sort(attribute='due_date') %}
+      <tr>
+        <td>
+          {% if d.completed %}
+            <span class="badge badge-green">Done</span>
+          {% elif d.due_date < today %}
+            <span class="badge badge-red">Overdue</span>
+          {% else %}
+            <span class="badge badge-yellow">Pending</span>
+          {% endif %}
+        </td>
+        <td>{{ d.due_date.isoformat() }}</td>
+        <td>{{ d.label }}</td>
+        <td class="hint">{{ d.notes }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# ── SECTION 4: Next Action (context-dependent) ── #}
+
+{% if petition.status.value == "forms_ready" %}
+<div class="card" style="border-left: 4px solid #2563eb;">
+  <h2>Next: File Your Petition</h2>
+  <p>Your documents are ready. Follow the filing instructions above, then confirm once filed.</p>
+  <form method="POST" action="{{ url_for('main.record_milestone', petition_id=petition.petition_id) }}">
+    <input type="hidden" name="action" value="filed">
+    <button type="submit" class="btn">I Have Filed My Petition</button>
+  </form>
+</div>
+
+{% elif petition.status.value == "filed" %}
+<div class="card" style="border-left: 4px solid #2563eb;">
+  <h2>Next: Hearing Scheduled</h2>
+  <p>Once you receive your hearing date from the court, record it here.</p>
+  <form method="POST" action="{{ url_for('main.record_milestone', petition_id=petition.petition_id) }}">
+    <input type="hidden" name="action" value="hearing_scheduled">
+    <label>Hearing Date</label>
+    <input type="text" name="hearing_date" placeholder="MM/DD/YYYY" style="max-width:200px;">
+    <button type="submit" class="btn">Hearing Scheduled</button>
+  </form>
+</div>
+
+{% elif petition.status.value == "hearing_scheduled" %}
+<div class="card" style="border-left: 4px solid #2563eb;">
+  <h2>Next: Record Hearing Outcome</h2>
+  {% if petition.hearing_date %}
+    <p>Your hearing is scheduled for <strong>{{ petition.hearing_date.strftime('%B %d, %Y') }}</strong>.</p>
+  {% endif %}
+  <p>After your hearing, record the outcome below.</p>
+  <form method="POST" action="{{ url_for('main.record_milestone', petition_id=petition.petition_id) }}" style="display:flex; gap:8px;">
+    <input type="hidden" name="action" value="hearing_outcome">
+    <button type="submit" name="outcome" value="granted" class="btn btn-success">Granted</button>
+    <button type="submit" name="outcome" value="denied" class="btn" style="background:#dc2626;">Denied</button>
+  </form>
+</div>
+
+{% elif petition.status.value == "denied" %}
+<div class="card" style="border-left: 4px solid #dc2626;">
+  <h2>Petition Denied</h2>
+  <p>Your petition was denied by the court. Consider consulting an attorney about your options,
+     which may include filing an appeal or a new petition.</p>
+</div>
+
+{% elif petition.status.value in ("granted", "post_decree_in_progress") %}
+{# ── SECTION 5: Post-Decree Checklist ── #}
+{% set completed_agencies = [] %}
+{% for u in petition.downstream_updates %}
+  {% if u.status.value == "completed" %}
+    {% if completed_agencies.append(u.agency) %}{% endif %}
+  {% endif %}
+{% endfor %}
+
+{% set total = petition.downstream_updates | length %}
+{% set done = completed_agencies | length %}
+
+<div class="card" style="border-left: 4px solid #16a34a;">
+  <h2>Post-Decree Updates
+    <span class="badge {% if done == total %}badge-green{% else %}badge-blue{% endif %}">
+      {{ done }}/{{ total }} complete
+    </span>
+  </h2>
+  <p>Your name change has been granted. Update your identity with each agency below.
+     Work through the tiers in order — items within a tier can be done in parallel.</p>
+</div>
+
+{% for tier in plan %}
+<div class="tier">
+  <h3>Tier {{ loop.index }}
+    {% if loop.index == 1 %}<span class="hint"> — Start here</span>{% endif %}
+  </h3>
+
+  {% for action in tier %}
+  <div class="card" style="{% if action.agency in completed_agencies %}opacity:0.55;{% endif %}">
+    <h3 style="margin-top:0;">
+      {{ action.agency }}
+      {% if action.agency in completed_agencies %}
+        <span class="badge badge-green">Complete</span>
+      {% endif %}
+    </h3>
+
+    <ol>
+      {% for step in action.instructions %}
+        <li>{{ step }}</li>
+      {% endfor %}
+    </ol>
+
+    <p><strong>Documents needed:</strong> {{ action.required_documents | join(', ') }}</p>
+    {% if action.website %}
+      <p><strong>Website:</strong> <a href="{{ action.website }}" target="_blank">{{ action.website }}</a></p>
+    {% endif %}
+
+    {% if action.agency not in completed_agencies %}
+    <form method="POST" action="{{ url_for('main.complete_update', petition_id=petition.petition_id) }}" style="display:inline;">
+      <input type="hidden" name="agency" value="{{ action.agency }}">
+      <button type="submit" class="btn btn-sm btn-success">Mark Complete</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+
+{% elif petition.status.value == "completed" %}
+<div class="card" style="border-left: 4px solid #16a34a;">
+  <h2>Name Change Complete</h2>
+  <p>All downstream updates have been completed. Your legal name change process is finished.</p>
+  <p>Keep your certified court order in a safe place — you may need it for future verifications.</p>
+</div>
+{% endif %}
+
+{% endblock %}

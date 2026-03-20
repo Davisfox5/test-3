@@ -347,6 +347,9 @@ def _generate_ss5(p: NameChangePetition, out_dir: str) -> Document:
         annots = page.get("/Annots")
         if not annots:
             continue
+        # Resolve indirect objects
+        if hasattr(annots, "get_object"):
+            annots = annots.get_object()
         for annot in annots:
             annot_obj = annot.get_object()
             field_name = annot_obj.get("/T")

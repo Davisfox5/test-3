@@ -18,7 +18,11 @@ from flask import (
     url_for,
 )
 
-from va_name_change.agents.filing import format_instructions, prepare_filing
+from va_name_change.agents.filing import (
+    format_instructions,
+    get_filing_instructions,
+    prepare_filing,
+)
 from va_name_change.agents.forms import generate_all_forms
 from va_name_change.agents.post_decree import (
     build_update_plan,
@@ -240,14 +244,98 @@ def intake_step4():
             ],
         )
         petition.advance(PetitionStatus.INTAKE)
+
+        # ── AUTO-GENERATE all forms and filing instructions ──
+        generate_all_forms(petition)
+        prepare_filing(petition)
+
         store.save(petition)
 
         # Clear intake from session, store petition ID
         session.pop("intake", None)
         session["petition_id"] = petition.petition_id
-        return redirect(url_for("main.documents", petition_id=petition.petition_id))
+
+        flash("Your petition has been created and all documents generated automatically.", "success")
+        return redirect(url_for("main.dashboard", petition_id=petition.petition_id))
 
     return render_template("intake/step4_confirm.html", data=data, court=court)
+
+
+# -- Dashboard (unified automated view) ------------------------------------
+
+@bp.route("/petition/<petition_id>/dashboard")
+def dashboard(petition_id: str):
+    petition = store.get(petition_id)
+    if not petition:
+        abort(404)
+
+    # Ensure forms exist (idempotent — skips if already generated)
+    if not petition.documents:
+        generate_all_forms(petition)
+
+    # Build filing instructions (read-only — does not mutate status)
+    instructions = None
+    if petition.jurisdiction and petition.status != PetitionStatus.INTAKE:
+        instructions = get_filing_instructions(petition)
+
+    # Build timeline
+    timeline = build_default_timeline(petition)
+
+    # Build post-decree plan if applicable
+    plan = None
+    if petition.status in (PetitionStatus.GRANTED, PetitionStatus.POST_DECREE_IN_PROGRESS, PetitionStatus.COMPLETED):
+        if petition.status == PetitionStatus.GRANTED:
+            safe_advance(petition, PetitionStatus.POST_DECREE_IN_PROGRESS)
+        plan = build_update_plan(petition)
+
+    return render_template("dashboard.html",
+                           petition=petition,
+                           instructions=instructions,
+                           timeline=timeline,
+                           plan=plan,
+                           today=date.today())
+
+
+# -- Milestone recording (automated status transitions) --------------------
+
+@bp.route("/petition/<petition_id>/milestone", methods=["POST"])
+def record_milestone(petition_id: str):
+    petition = store.get(petition_id)
+    if not petition:
+        abort(404)
+
+    action = request.form.get("action", "")
+
+    try:
+        if action == "filed":
+            # forms_ready → filed (already happened via prepare_filing, but
+            # the user is confirming they physically submitted)
+            if petition.status == PetitionStatus.FORMS_READY:
+                safe_advance(petition, PetitionStatus.FILED)
+            flash("Filing confirmed. Waiting for hearing date.", "success")
+
+        elif action == "hearing_scheduled":
+            hearing_raw = request.form.get("hearing_date", "").strip()
+            hearing_date = _parse_date(hearing_raw) if hearing_raw else None
+            if hearing_date:
+                petition.hearing_date = hearing_date
+            safe_advance(petition, PetitionStatus.HEARING_SCHEDULED)
+            flash("Hearing scheduled.", "success")
+
+        elif action == "hearing_outcome":
+            outcome = request.form.get("outcome", "").lower()
+            if outcome == "granted":
+                safe_advance(petition, PetitionStatus.GRANTED)
+                flash("Congratulations! Your name change has been granted. "
+                      "Your post-decree update plan is ready below.", "success")
+            else:
+                safe_advance(petition, PetitionStatus.DENIED)
+                flash("Petition denied. Please consult an attorney for next steps.", "error")
+
+    except InvalidTransitionError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("main.dashboard", petition_id=petition_id))
 
 
 # -- Documents --------------------------------------------------------------
@@ -290,12 +378,7 @@ def filing(petition_id: str):
     if not petition:
         abort(404)
 
-    if petition.status == PetitionStatus.FORMS_READY:
-        instructions = prepare_filing(petition)
-    else:
-        instructions = prepare_filing(petition) if petition.status in (
-            PetitionStatus.FORMS_READY, PetitionStatus.FILED,
-        ) else None
+    instructions = get_filing_instructions(petition) if petition.jurisdiction else None
 
     timeline = build_default_timeline(petition)
     return render_template("filing.html", petition=petition,
@@ -359,4 +442,8 @@ def complete_update(petition_id: str):
     else:
         flash(f"Agency '{agency}' not found.", "error")
 
+    # Redirect back to wherever the user came from (dashboard or post-decree page)
+    referrer = request.referrer or ""
+    if "dashboard" in referrer:
+        return redirect(url_for("main.dashboard", petition_id=petition_id))
     return redirect(url_for("main.post_decree", petition_id=petition_id))
