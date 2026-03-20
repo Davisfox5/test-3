@@ -18,6 +18,7 @@ from flask import (
     url_for,
 )
 
+from va_name_change.agents.efiling import can_efile, submit_efiling
 from va_name_change.agents.filing import (
     format_instructions,
     get_filing_instructions,
@@ -245,9 +246,29 @@ def intake_step4():
         )
         petition.advance(PetitionStatus.INTAKE)
 
-        # ── AUTO-GENERATE all forms and filing instructions ──
+        # ── AUTO-GENERATE all forms ──
         generate_all_forms(petition)
-        prepare_filing(petition)
+
+        # ── AUTO-FILE: e-file for eligible courts, manual instructions otherwise ──
+        if can_efile(petition):
+            result = submit_efiling(petition)
+            if result.success:
+                petition.case_number = result.submission.case_number
+                petition.efiling_confirmation = result.submission.confirmation_code
+                petition.efiling_envelope_id = result.submission.envelope_id
+                if result.submission.hearing_date:
+                    petition.hearing_date = result.submission.hearing_date
+                flash(result.message, "success")
+            else:
+                # E-filing failed — fall back to manual
+                prepare_filing(petition)
+                flash(f"E-filing failed: {result.error or result.message}. "
+                      "Manual filing instructions shown below.", "error")
+        else:
+            prepare_filing(petition)
+            flash("Your petition has been created and all documents generated. "
+                  "This court does not accept e-filing — follow the manual filing "
+                  "instructions below.", "success")
 
         store.save(petition)
 
@@ -255,7 +276,6 @@ def intake_step4():
         session.pop("intake", None)
         session["petition_id"] = petition.petition_id
 
-        flash("Your petition has been created and all documents generated automatically.", "success")
         return redirect(url_for("main.dashboard", petition_id=petition.petition_id))
 
     return render_template("intake/step4_confirm.html", data=data, court=court)

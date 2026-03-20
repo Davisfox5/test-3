@@ -111,6 +111,9 @@ class NameChangePetition:
     documents: list[Document] = field(default_factory=list)
     downstream_updates: list[DownstreamUpdate] = field(default_factory=list)
     hearing_date: Optional[date] = None
+    case_number: Optional[str] = None          # assigned by court after filing
+    efiling_confirmation: Optional[str] = None  # VJEFS confirmation code
+    efiling_envelope_id: Optional[str] = None   # VJEFS envelope tracking ID
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
 
