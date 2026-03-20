@@ -27,7 +27,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(703) 246-2772",
         filing_fee_usd=53.00,
-        accepts_efiling=True,
+        vjefs_participant=True,
         local_rules_url="https://www.fairfaxcounty.gov/circuit/",
         publication_required=True,
     ),
@@ -42,7 +42,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(703) 228-7010",
         filing_fee_usd=53.00,
-        accepts_efiling=True,
+        vjefs_participant=True,
         local_rules_url="https://courts.arlingtonva.us/circuit-court/",
     ),
     "richmond city": CircuitCourt(
@@ -56,7 +56,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(804) 646-6505",
         filing_fee_usd=53.00,
-        accepts_efiling=False,
+        vjefs_participant=False,
     ),
     "loudoun": CircuitCourt(
         name="Loudoun County Circuit Court",
@@ -69,7 +69,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(703) 777-0270",
         filing_fee_usd=53.00,
-        accepts_efiling=True,
+        vjefs_participant=True,
     ),
     "virginia beach": CircuitCourt(
         name="Virginia Beach Circuit Court",
@@ -82,7 +82,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(757) 385-4181",
         filing_fee_usd=53.00,
-        accepts_efiling=False,
+        vjefs_participant=False,
     ),
     "prince william": CircuitCourt(
         name="Prince William County Circuit Court",
@@ -95,7 +95,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(703) 792-6015",
         filing_fee_usd=53.00,
-        accepts_efiling=True,
+        vjefs_participant=True,
     ),
     "henrico": CircuitCourt(
         name="Henrico County Circuit Court",
@@ -108,7 +108,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(804) 501-4202",
         filing_fee_usd=53.00,
-        accepts_efiling=False,
+        vjefs_participant=False,
     ),
     "norfolk": CircuitCourt(
         name="Norfolk Circuit Court",
@@ -121,7 +121,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(757) 664-4380",
         filing_fee_usd=53.00,
-        accepts_efiling=False,
+        vjefs_participant=False,
     ),
     "chesterfield": CircuitCourt(
         name="Chesterfield County Circuit Court",
@@ -134,7 +134,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(804) 748-1241",
         filing_fee_usd=53.00,
-        accepts_efiling=False,
+        vjefs_participant=False,
     ),
     "alexandria": CircuitCourt(
         name="Alexandria Circuit Court",
@@ -147,7 +147,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(703) 746-4044",
         filing_fee_usd=53.00,
-        accepts_efiling=True,
+        vjefs_participant=True,
     ),
     # -------------------------------------------------------------------
     # Roanoke metro area
@@ -163,7 +163,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(540) 853-6702",
         filing_fee_usd=53.00,
-        accepts_efiling=True,  # VJEFS participant
+        vjefs_participant=True,  # VJEFS participant
         local_rules_url="https://www.vacourts.gov/courts/circuit/Roanoke_City/home.html",
     ),
     "roanoke county": CircuitCourt(
@@ -177,7 +177,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(540) 387-6205",
         filing_fee_usd=53.00,
-        accepts_efiling=True,  # VJEFS participant
+        vjefs_participant=True,  # VJEFS participant
         local_rules_url="https://www.vacourts.gov/courts/circuit/Roanoke_County/home.html",
     ),
     "salem": CircuitCourt(
@@ -191,7 +191,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(540) 375-3067",
         filing_fee_usd=53.00,
-        accepts_efiling=True,  # VJEFS participant
+        vjefs_participant=True,  # VJEFS participant
         local_rules_url="https://www.vacourts.gov/courts/circuit/Salem/home.html",
     ),
     "botetourt": CircuitCourt(
@@ -205,7 +205,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(540) 473-8274",
         filing_fee_usd=53.00,
-        accepts_efiling=False,  # Not a VJEFS participant
+        vjefs_participant=False,  # Not a VJEFS participant
     ),
     "craig": CircuitCourt(
         name="Craig County Circuit Court",
@@ -218,7 +218,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(540) 864-6141",
         filing_fee_usd=53.00,
-        accepts_efiling=True,  # VJEFS participant
+        vjefs_participant=True,  # VJEFS participant
     ),
     "franklin county": CircuitCourt(
         name="Franklin County Circuit Court",
@@ -231,7 +231,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(540) 483-3065",
         filing_fee_usd=53.00,
-        accepts_efiling=False,  # Not a VJEFS participant
+        vjefs_participant=False,  # Not a VJEFS participant
     ),
     "bedford county": CircuitCourt(
         name="Bedford County Circuit Court",
@@ -244,7 +244,7 @@ _COURT_REGISTRY: dict[str, CircuitCourt] = {
         ),
         phone="(540) 586-7632",
         filing_fee_usd=53.00,
-        accepts_efiling=True,  # VJEFS participant
+        vjefs_participant=True,  # VJEFS participant
     ),
 }
 

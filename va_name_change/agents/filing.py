@@ -1,14 +1,25 @@
-"""Filing Agent — handles submission of the petition to the circuit court.
+"""Filing Agent — produces step-by-step instructions for filing the petition.
 
-Depending on the jurisdiction, filing may be electronic (via the Virginia
-OCRA e-filing portal) or physical (print-and-mail / in-person).  This
-agent determines the correct path and produces actionable instructions.
+Virginia circuit courts require name change petitions (CC-1411) to be filed
+in person or by mail.  The application must be signed under oath before a
+notary public or a deputy clerk (Va. Code § 8.01-217).
+
+There is no public API or self-service e-filing option for pro se name
+change petitions:
+  - VJEFS (Virginia Judiciary eFiling System) is restricted to licensed
+    Virginia attorneys and their staff.
+  - eFileVA (Tyler/Odyssey) supports some courts and case types but
+    name change availability varies by jurisdiction and still requires
+    the oath/notarization step.
+
+This agent generates accurate, court-specific filing instructions for
+in-person or mail submission.
 """
 
 from __future__ import annotations
 
 import textwrap
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from va_name_change.models import NameChangePetition, PetitionStatus
@@ -18,88 +29,122 @@ from va_name_change.models import NameChangePetition, PetitionStatus
 class FilingInstructions:
     """Structured output from the filing agent."""
 
-    method: str                    # "efiling" | "in_person" | "mail"
+    method: str                    # "in_person" | "mail"
     steps: list[str]
     filing_fee: float
     payment_methods: list[str]
     court_name: str
     court_address: str
     court_phone: str
-    efiling_url: Optional[str] = None
-    fingerprint_info: str = ""
+    oath_info: str = ""
+    publication_info: str = ""
+    background_check_info: str = ""
     estimated_timeline: str = ""
+    local_rules_url: str = ""
 
 
-def _fingerprint_guidance(petition: NameChangePetition) -> str:
-    """Return jurisdiction-appropriate fingerprint instructions."""
+def _oath_guidance() -> str:
+    """Guidance on the oath/notarization requirement."""
     return textwrap.dedent("""\
-        Per Va. Code § 8.01-217, a criminal background check is required.
-        Steps:
-          1. Obtain a fingerprint card from your local police department
-             or an approved Live Scan provider.
-          2. Have your fingerprints taken (fee varies, typically $10-$15).
-          3. Submit the card to the circuit court clerk with your petition.
-          4. The clerk will forward it to the Virginia State Police for
-             processing (additional fee may apply).
+        Per Va. Code § 8.01-217, the application must be made under oath.
+        You must sign the CC-1411 petition in the presence of either:
+          - A notary public (before visiting the court), OR
+          - A deputy clerk at the circuit court clerk's office.
+        Do NOT sign the petition until you are before the notary or clerk.
+    """).strip()
+
+
+def _publication_guidance(petition: NameChangePetition) -> str:
+    """Guidance on the newspaper publication requirement."""
+    court = petition.jurisdiction
+    if court and not court.publication_required:
+        return "Publication is not required by this jurisdiction."
+
+    county = petition.address.county or petition.address.city if petition.address else "your locality"
+    return textwrap.dedent(f"""\
+        Virginia typically requires notice of the name change to be published
+        in a newspaper of general circulation in {county} once a week for a
+        period set by local rules (often 1-4 weeks). The court clerk can tell
+        you which newspapers are accepted and the required publication period.
+        You may request the court to waive publication if you can demonstrate
+        a serious threat to your health or safety (Va. Code § 8.01-217(G)).
+    """).strip()
+
+
+def _background_check_guidance() -> str:
+    """Guidance on criminal history disclosure (NOT fingerprinting).
+
+    Va. Code § 8.01-217 does NOT require fingerprinting.  The statute
+    requires the applicant to self-disclose their felony conviction record,
+    sex offender registry status, and incarceration/probation status under
+    oath.  Some individual courts may have local practices that differ.
+    """
+    return textwrap.dedent("""\
+        The CC-1411 petition requires you to disclose under oath:
+          - Any felony conviction record
+          - Whether you are required to register with the Sex Offender
+            and Crimes Against Minors Registry
+          - Whether you are currently incarcerated or on probation
+          - Any previous name changes
+        Note: Va. Code § 8.01-217 does not require fingerprinting.
+        Some courts may have additional local requirements — check with
+        your clerk's office.
     """).strip()
 
 
 def get_filing_instructions(petition: NameChangePetition) -> FilingInstructions:
-    """Build filing instructions without changing petition status."""
+    """Build filing instructions without changing petition status.
+
+    All name change petitions are filed in person or by mail.
+    """
     court = petition.jurisdiction
     assert court is not None
 
-    fingerprint_info = _fingerprint_guidance(petition)
+    oath_info = _oath_guidance()
+    publication_info = _publication_guidance(petition)
+    background_info = _background_check_guidance()
 
-    if court.accepts_efiling:
-        return FilingInstructions(
-            method="efiling",
-            steps=[
-                f"Navigate to the Virginia OCRA e-filing portal for {court.name}.",
-                "Create an account or log in.",
-                "Select 'Civil — Petition for Change of Name'.",
-                "Upload the completed CC-1411 petition PDF.",
-                f"Pay the filing fee of ${court.filing_fee_usd:.2f} via credit card.",
-                "Upload or schedule fingerprint submission as instructed by the portal.",
-                "Save your confirmation number for tracking.",
-            ],
-            filing_fee=court.filing_fee_usd,
-            payment_methods=["credit_card", "debit_card"],
-            court_name=court.name,
-            court_address=(
-                f"{court.address.street}, {court.address.city}, "
-                f"VA {court.address.zip_code}"
+    return FilingInstructions(
+        method="in_person",
+        steps=[
+            "Print all generated documents from your output folder.",
+            "Make two photocopies of the completed CC-1411 petition.",
+            "Do NOT sign the petition yet — it must be signed under oath.",
+            (
+                f"Visit the {court.name} clerk's office at: "
+                f"{court.address.street}, {court.address.city}, VA {court.address.zip_code}"
             ),
-            court_phone=court.phone,
-            efiling_url=court.local_rules_url,
-            fingerprint_info=fingerprint_info,
-            estimated_timeline="Typically 4-8 weeks from filing to hearing.",
-        )
-    else:
-        return FilingInstructions(
-            method="in_person",
-            steps=[
-                f"Print all documents from your output folder.",
-                "Obtain a fingerprint card from your local police department.",
-                f"Visit the {court.name} clerk's office at:",
-                f"  {court.address.street}, {court.address.city}, VA {court.address.zip_code}",
-                f"  Phone: {court.phone}",
-                f"Submit the petition (CC-1411), cover letter, and fingerprint card.",
-                f"Pay the filing fee of ${court.filing_fee_usd:.2f}.",
-                "Request a hearing date from the clerk.",
-                "Ask the clerk about publication requirements for your jurisdiction.",
-            ],
-            filing_fee=court.filing_fee_usd,
-            payment_methods=["check", "money_order", "cash"],
-            court_name=court.name,
-            court_address=(
-                f"{court.address.street}, {court.address.city}, "
-                f"VA {court.address.zip_code}"
+            (
+                "Sign the petition under oath before a deputy clerk, or bring "
+                "a copy already notarized by a notary public."
             ),
-            court_phone=court.phone,
-            fingerprint_info=fingerprint_info,
-            estimated_timeline="Typically 6-12 weeks from filing to hearing.",
-        )
+            "Submit the petition (CC-1411), cover letter, and photocopies.",
+            f"Pay the filing fee of ${court.filing_fee_usd:.2f}.",
+            "Ask the clerk about newspaper publication requirements.",
+            (
+                "The clerk will inform you whether a hearing is needed. "
+                "Many Virginia courts grant uncontested name changes without "
+                "a hearing."
+            ),
+        ],
+        filing_fee=court.filing_fee_usd,
+        payment_methods=["check", "money_order", "cash", "credit_card"],
+        court_name=court.name,
+        court_address=(
+            f"{court.address.street}, {court.address.city}, "
+            f"VA {court.address.zip_code}"
+        ),
+        court_phone=court.phone,
+        oath_info=oath_info,
+        publication_info=publication_info,
+        background_check_info=background_info,
+        estimated_timeline=(
+            "Varies by court. Many uncontested name changes are granted "
+            "within 2-8 weeks. Courts that require publication or a hearing "
+            "may take longer."
+        ),
+        local_rules_url=court.local_rules_url,
+    )
 
 
 def prepare_filing(petition: NameChangePetition) -> FilingInstructions:
@@ -126,9 +171,17 @@ def format_instructions(fi: FilingInstructions) -> str:
 
     lines += [
         "",
-        "Fingerprint / Background Check:",
-        fi.fingerprint_info,
+        "Oath / Notarization Requirement:",
+        fi.oath_info,
+        "",
+        "Publication Requirement:",
+        fi.publication_info,
+        "",
+        "Criminal History Disclosure:",
+        fi.background_check_info,
         "",
         f"Estimated timeline: {fi.estimated_timeline}",
     ]
+    if fi.local_rules_url:
+        lines.append(f"Local rules: {fi.local_rules_url}")
     return "\n".join(lines)

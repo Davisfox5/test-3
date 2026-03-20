@@ -10,7 +10,6 @@ from va_name_change.web import store
 def app():
     app = create_app()
     app.config["TESTING"] = True
-    # Clear store between tests
     store._store.clear()
     yield app
 
@@ -47,8 +46,7 @@ def _run_intake(client, monkeypatch, tmp_path,
     })
     resp = client.post("/intake/step4", follow_redirects=False)
     location = resp.headers["Location"]
-    petition_id = location.split("/petition/")[1].split("/")[0]
-    return petition_id
+    return location.split("/petition/")[1].split("/")[0]
 
 
 # ---------------------------------------------------------------------------
@@ -69,9 +67,7 @@ def test_intake_step1_get(client):
 
 def test_intake_step1_post_validation(client):
     resp = client.post("/intake/step1", data={
-        "current_name": "",
-        "desired_name": "",
-        "reason": "",
+        "current_name": "", "desired_name": "", "reason": "",
     }, follow_redirects=True)
     assert b"required" in resp.data.lower() or resp.status_code == 200
 
@@ -88,11 +84,11 @@ def test_intake_step1_post_success(client):
 
 def test_intake_step2_requires_step1(client):
     resp = client.get("/intake/step2")
-    assert resp.status_code == 302  # redirects to step1
+    assert resp.status_code == 302
 
 
 # ---------------------------------------------------------------------------
-# Full intake → dashboard redirect
+# Full intake → dashboard
 # ---------------------------------------------------------------------------
 
 def test_full_intake_redirects_to_dashboard(client, monkeypatch, tmp_path):
@@ -106,12 +102,17 @@ def test_full_intake_redirects_to_dashboard(client, monkeypatch, tmp_path):
 def test_intake_auto_generates_documents(client, monkeypatch, tmp_path):
     pid = _run_intake(client, monkeypatch, tmp_path)
     petition = store.get(pid)
-    # Documents should already be generated
     assert len(petition.documents) >= 3
     doc_types = [d.doc_type.value for d in petition.documents]
     assert "CC-1411" in doc_types
     assert "cover_letter" in doc_types
     assert "SS-5" in doc_types
+
+
+def test_intake_advances_to_filed(client, monkeypatch, tmp_path):
+    pid = _run_intake(client, monkeypatch, tmp_path)
+    petition = store.get(pid)
+    assert petition.status.value == "filed"
 
 
 # ---------------------------------------------------------------------------
@@ -126,42 +127,34 @@ def test_dashboard_shows_documents(client, monkeypatch, tmp_path):
     assert b"Download" in resp.data
 
 
-def test_dashboard_shows_efiling_for_eligible_court(client, monkeypatch, tmp_path):
-    """Roanoke City supports e-filing — dashboard should show e-filing confirmation."""
-    pid = _run_intake(client, monkeypatch, tmp_path, county="roanoke city")
+def test_dashboard_shows_filing_instructions(client, monkeypatch, tmp_path):
+    pid = _run_intake(client, monkeypatch, tmp_path)
     resp = client.get(f"/petition/{pid}/dashboard")
-    assert b"E-Filing Confirmed" in resp.data
-    assert b"Case Number" in resp.data
+    assert b"How to File" in resp.data
+    assert b"Roanoke" in resp.data
+    assert b"under oath" in resp.data
 
 
-def test_dashboard_shows_manual_for_non_efiling_court(client, monkeypatch, tmp_path):
-    """Botetourt doesn't support e-filing — dashboard should show manual instructions."""
-    pid = _run_intake(client, monkeypatch, tmp_path, county="botetourt",
-                      city="Fincastle", zip_code="24090")
+def test_dashboard_shows_oath_and_publication_info(client, monkeypatch, tmp_path):
+    pid = _run_intake(client, monkeypatch, tmp_path)
     resp = client.get(f"/petition/{pid}/dashboard")
-    assert b"Filing Instructions" in resp.data
-    assert b"E-Filing Confirmed" not in resp.data
+    assert b"Oath" in resp.data
+    assert b"Publication" in resp.data
+    assert b"Criminal History" in resp.data
 
 
 def test_dashboard_shows_next_action(client, monkeypatch, tmp_path):
     pid = _run_intake(client, monkeypatch, tmp_path)
     resp = client.get(f"/petition/{pid}/dashboard")
-    # E-filing court: should be at hearing_scheduled, showing hearing outcome buttons
-    assert b"Hearing" in resp.data
+    assert b"Waiting for Court Response" in resp.data
 
 
 # ---------------------------------------------------------------------------
-# Milestone recording — manual court flow (Botetourt, no e-filing)
+# Milestone recording
 # ---------------------------------------------------------------------------
 
-def test_milestone_manual_court_flow(client, monkeypatch, tmp_path):
-    """Non-efiling court: manual flow filed → hearing_scheduled → granted."""
-    pid = _run_intake(client, monkeypatch, tmp_path, county="botetourt",
-                      city="Fincastle", zip_code="24090")
-    petition = store.get(pid)
-    assert petition.status.value == "filed"
-
-    # Record hearing_scheduled
+def test_milestone_hearing_scheduled(client, monkeypatch, tmp_path):
+    pid = _run_intake(client, monkeypatch, tmp_path)
     resp = client.post(f"/petition/{pid}/milestone", data={
         "action": "hearing_scheduled",
         "hearing_date": "06/15/2026",
@@ -171,23 +164,24 @@ def test_milestone_manual_court_flow(client, monkeypatch, tmp_path):
     assert petition.status.value == "hearing_scheduled"
 
 
-# ---------------------------------------------------------------------------
-# Milestone recording — e-filing court flow (Roanoke City)
-# ---------------------------------------------------------------------------
-
-def test_milestone_efiling_court_auto_advances(client, monkeypatch, tmp_path):
-    """E-filing court: auto-advances to hearing_scheduled with hearing date."""
-    pid = _run_intake(client, monkeypatch, tmp_path, county="roanoke city")
-    petition = store.get(pid)
-    # Should already be at hearing_scheduled from auto-efiling
-    assert petition.status.value == "hearing_scheduled"
-    assert petition.hearing_date is not None
-    assert petition.case_number is not None
-
-
-def test_milestone_granted(client, monkeypatch, tmp_path):
+def test_milestone_granted_no_hearing(client, monkeypatch, tmp_path):
+    """Many VA courts grant without a hearing — test the skip path."""
     pid = _run_intake(client, monkeypatch, tmp_path)
-    # E-filing court: already at hearing_scheduled
+    resp = client.post(f"/petition/{pid}/milestone", data={
+        "action": "hearing_scheduled",
+        "skip_to_granted": "yes",
+    }, follow_redirects=True)
+    assert resp.status_code == 200
+    petition = store.get(pid)
+    assert petition.status.value in ("granted", "post_decree_in_progress")
+
+
+def test_milestone_granted_after_hearing(client, monkeypatch, tmp_path):
+    pid = _run_intake(client, monkeypatch, tmp_path)
+    client.post(f"/petition/{pid}/milestone", data={
+        "action": "hearing_scheduled",
+        "hearing_date": "06/15/2026",
+    })
     resp = client.post(f"/petition/{pid}/milestone", data={
         "action": "hearing_outcome",
         "outcome": "granted",
@@ -198,7 +192,10 @@ def test_milestone_granted(client, monkeypatch, tmp_path):
 
 def test_milestone_denied(client, monkeypatch, tmp_path):
     pid = _run_intake(client, monkeypatch, tmp_path)
-    # E-filing court: already at hearing_scheduled
+    client.post(f"/petition/{pid}/milestone", data={
+        "action": "hearing_scheduled",
+        "hearing_date": "06/15/2026",
+    })
     resp = client.post(f"/petition/{pid}/milestone", data={
         "action": "hearing_outcome",
         "outcome": "denied",
@@ -209,21 +206,19 @@ def test_milestone_denied(client, monkeypatch, tmp_path):
 
 
 def test_full_end_to_end_flow(client, monkeypatch, tmp_path):
-    """Test the complete automated pipeline: intake → e-file → hearing → post-decree → complete."""
+    """Complete pipeline: intake → file → granted (no hearing) → post-decree → complete."""
     pid = _run_intake(client, monkeypatch, tmp_path)
     petition = store.get(pid)
-    # E-filing: should be at hearing_scheduled with case number
-    assert petition.status.value == "hearing_scheduled"
-    assert petition.case_number is not None
+    assert petition.status.value == "filed"
     assert len(petition.documents) >= 3
 
-    # Granted
+    # Court grants without hearing
     client.post(f"/petition/{pid}/milestone", data={
-        "action": "hearing_outcome",
-        "outcome": "granted",
+        "action": "hearing_scheduled",
+        "skip_to_granted": "yes",
     })
 
-    # Dashboard should now show post-decree plan
+    # Dashboard should show post-decree plan
     resp = client.get(f"/petition/{pid}/dashboard")
     assert resp.status_code == 200
     assert b"Post-Decree Updates" in resp.data
@@ -239,7 +234,6 @@ def test_full_end_to_end_flow(client, monkeypatch, tmp_path):
     petition = store.get(pid)
     assert petition.status.value == "completed"
 
-    # Dashboard should show completion
     resp = client.get(f"/petition/{pid}/dashboard")
     assert b"Name Change Complete" in resp.data
 
@@ -279,9 +273,5 @@ def test_roanoke_jurisdictions_in_dropdown(client):
     resp = client.get("/intake/step3")
     assert resp.status_code == 200
     assert b"Roanoke City" in resp.data
-    assert b"Roanoke County" in resp.data
     assert b"Salem" in resp.data
     assert b"Botetourt" in resp.data
-    assert b"Craig" in resp.data
-    assert b"Bedford County" in resp.data
-    assert b"Franklin County" in resp.data

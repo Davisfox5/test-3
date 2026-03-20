@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from va_name_change.agents.filing import format_instructions, prepare_filing
+from va_name_change.agents.filing import format_instructions, prepare_filing, get_filing_instructions
 from va_name_change.models import Address, NameChangePetition, PetitionStatus
 from va_name_change.utils.jurisdiction import resolve_jurisdiction
 
@@ -20,25 +20,40 @@ def _petition(county: str) -> NameChangePetition:
     return p
 
 
-def test_efiling_jurisdiction():
+def test_all_courts_file_in_person():
+    """All name change petitions are filed in person or by mail."""
+    for county in ("Fairfax", "Richmond City", "Roanoke City"):
+        p = _petition(county)
+        fi = prepare_filing(p)
+        assert fi.method == "in_person"
+        assert p.status == PetitionStatus.FILED
+
+
+def test_instructions_include_oath_info():
     p = _petition("Fairfax")
-    fi = prepare_filing(p)
-    assert fi.method == "efiling"
-    assert fi.efiling_url
-    assert p.status == PetitionStatus.FILED
+    fi = get_filing_instructions(p)
+    assert "under oath" in fi.oath_info.lower()
+    assert "notary" in fi.oath_info.lower()
 
 
-def test_in_person_jurisdiction():
-    p = _petition("Richmond City")
-    fi = prepare_filing(p)
-    assert fi.method == "in_person"
-    assert fi.efiling_url is None
-    assert p.status == PetitionStatus.FILED
+def test_instructions_include_publication_info():
+    p = _petition("Roanoke City")
+    fi = get_filing_instructions(p)
+    assert "publication" in fi.publication_info.lower() or "newspaper" in fi.publication_info.lower()
+
+
+def test_instructions_include_background_check_info():
+    p = _petition("Fairfax")
+    fi = get_filing_instructions(p)
+    assert "felony" in fi.background_check_info.lower()
+    assert "fingerprint" in fi.background_check_info.lower()  # mentions it's NOT required
 
 
 def test_format_instructions():
     p = _petition("Fairfax")
     fi = prepare_filing(p)
     text = format_instructions(fi)
-    assert "EFILING" in text
+    assert "IN_PERSON" in text
     assert "Fairfax" in text
+    assert "Oath" in text
+    assert "Publication" in text

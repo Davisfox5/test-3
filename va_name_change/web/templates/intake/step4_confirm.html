@@ -51,8 +51,8 @@
     <dt>Filing Fee</dt>
     <dd>${{ "%.2f" | format(court.filing_fee_usd) }}</dd>
 
-    <dt>E-filing Available</dt>
-    <dd>{{ "Yes" if court.accepts_efiling else "No — in-person or mail filing required" }}</dd>
+    <dt>Filing Method</dt>
+    <dd>In person or by mail (application must be signed under oath)</dd>
   </dl>
 
   <form method="POST">

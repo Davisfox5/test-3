@@ -6,7 +6,7 @@
 
 {# ── Pipeline progress bar ── #}
 {% set ordered = ["intake", "forms_ready", "filed", "hearing_scheduled", "granted", "post_decree_in_progress", "completed"] %}
-{% set labels  = {"intake": "Intake", "forms_ready": "Forms Ready", "filed": "E-Filed",
+{% set labels  = {"intake": "Intake", "forms_ready": "Forms Ready", "filed": "Filed",
                   "hearing_scheduled": "Hearing", "granted": "Granted",
                   "post_decree_in_progress": "Post-Decree", "completed": "Complete"} %}
 <div class="pipeline">
@@ -24,22 +24,14 @@
   {% endfor %}
 </div>
 
-{# ── E-FILING STATUS BANNER ── #}
-{% if petition.efiling_confirmation %}
+{# ── Case info (if available) ── #}
+{% if petition.case_number %}
 <div class="card" style="border-left: 4px solid #16a34a; background: #f0fdf4;">
-  <h2>E-Filing Confirmed</h2>
   <dl>
-    <dt>Confirmation</dt><dd><code>{{ petition.efiling_confirmation }}</code></dd>
-    {% if petition.case_number %}
     <dt>Case Number</dt><dd><strong>{{ petition.case_number }}</strong></dd>
-    {% endif %}
-    {% if petition.efiling_envelope_id %}
-    <dt>VJEFS Envelope</dt><dd><code>{{ petition.efiling_envelope_id }}</code></dd>
-    {% endif %}
     {% if petition.hearing_date %}
     <dt>Hearing Date</dt><dd><strong>{{ petition.hearing_date.strftime('%B %d, %Y') }}</strong></dd>
     {% endif %}
-    <dt>Filing Fee</dt><dd>${{ "%.2f" | format(petition.jurisdiction.filing_fee_usd) }} (paid electronically)</dd>
   </dl>
 </div>
 {% endif %}
@@ -48,11 +40,9 @@
 {% if petition.documents %}
 <div class="card">
   <h2>Your Documents</h2>
-  {% if petition.efiling_confirmation %}
-  <p>These documents were auto-generated, pre-filled, and submitted electronically to {{ petition.jurisdiction.name }}.</p>
-  {% else %}
-  <p>All forms have been auto-generated and pre-filled with your information. Download, review, and sign where indicated.</p>
-  {% endif %}
+  <p>All forms have been auto-generated and pre-filled with your information.
+     <strong>Print these, but do NOT sign the CC-1411 yet</strong> — it must be signed under oath
+     before a notary public or deputy clerk.</p>
   <table>
     <thead><tr><th>Document</th><th>Generated</th><th></th></tr></thead>
     <tbody>
@@ -72,19 +62,19 @@
 </div>
 {% endif %}
 
-{# ── SECTION 2: Filing Instructions (manual courts only) ── #}
-{% if instructions and not petition.efiling_confirmation %}
+{# ── SECTION 2: Filing Instructions ── #}
+{% if instructions %}
 <div class="card">
-  <h2>Filing Instructions — {{ instructions.method | upper }}</h2>
+  <h2>How to File</h2>
   <dl>
     <dt>Court</dt><dd>{{ instructions.court_name }}</dd>
     <dt>Address</dt><dd>{{ instructions.court_address }}</dd>
     <dt>Phone</dt><dd>{{ instructions.court_phone }}</dd>
     <dt>Filing Fee</dt><dd>${{ "%.2f" | format(instructions.filing_fee) }}</dd>
     <dt>Payment</dt><dd>{{ instructions.payment_methods | join(', ') }}</dd>
-    {% if instructions.efiling_url %}
-    <dt>E-filing Portal</dt>
-    <dd><a href="{{ instructions.efiling_url }}" target="_blank">{{ instructions.efiling_url }}</a></dd>
+    {% if instructions.local_rules_url %}
+    <dt>Court Website</dt>
+    <dd><a href="{{ instructions.local_rules_url }}" target="_blank">{{ instructions.local_rules_url }}</a></dd>
     {% endif %}
     <dt>Timeline</dt><dd>{{ instructions.estimated_timeline }}</dd>
   </dl>
@@ -96,8 +86,14 @@
     {% endfor %}
   </ol>
 
-  <h3>Fingerprint / Background Check</h3>
-  <p style="white-space:pre-line;">{{ instructions.fingerprint_info }}</p>
+  <h3>Oath / Notarization Requirement</h3>
+  <p style="white-space:pre-line;">{{ instructions.oath_info }}</p>
+
+  <h3>Publication Requirement</h3>
+  <p style="white-space:pre-line;">{{ instructions.publication_info }}</p>
+
+  <h3>Criminal History Disclosure</h3>
+  <p style="white-space:pre-line;">{{ instructions.background_check_info }}</p>
 </div>
 {% endif %}
 
@@ -134,22 +130,28 @@
 {% if petition.status.value == "forms_ready" %}
 <div class="card" style="border-left: 4px solid #2563eb;">
   <h2>Next: File Your Petition</h2>
-  <p>Your documents are ready. Follow the filing instructions above, then confirm once filed.</p>
+  <p>Your documents are ready. Print them, sign under oath, and file with the court clerk.
+     Confirm here once you have filed.</p>
   <form method="POST" action="{{ url_for('main.record_milestone', petition_id=petition.petition_id) }}">
     <input type="hidden" name="action" value="filed">
     <button type="submit" class="btn">I Have Filed My Petition</button>
   </form>
 </div>
 
-{% elif petition.status.value == "filed" and not petition.hearing_date %}
+{% elif petition.status.value == "filed" %}
 <div class="card" style="border-left: 4px solid #2563eb;">
-  <h2>Next: Hearing Scheduled</h2>
-  <p>Once you receive your hearing date from the court, record it here.</p>
+  <h2>Waiting for Court Response</h2>
+  <p>Your petition has been filed. The court will either grant it directly (many uncontested
+     name changes are granted without a hearing) or schedule a hearing date.</p>
+  <p>Record the outcome when you hear back from the court:</p>
   <form method="POST" action="{{ url_for('main.record_milestone', petition_id=petition.petition_id) }}">
     <input type="hidden" name="action" value="hearing_scheduled">
-    <label>Hearing Date</label>
-    <input type="text" name="hearing_date" placeholder="MM/DD/YYYY" style="max-width:200px;">
-    <button type="submit" class="btn">Hearing Scheduled</button>
+    <label>Hearing Date (if applicable)</label>
+    <input type="text" name="hearing_date" placeholder="MM/DD/YYYY or leave blank" style="max-width:240px;">
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button type="submit" name="skip_to_granted" value="yes" class="btn btn-success">Granted (No Hearing)</button>
+      <button type="submit" class="btn">Hearing Scheduled</button>
+    </div>
   </form>
 </div>
 
@@ -192,8 +194,9 @@
       {{ done }}/{{ total }} complete
     </span>
   </h2>
-  <p>Your name change has been granted. Update your identity with each agency below.
-     Work through the tiers in order — items within a tier can be done in parallel.</p>
+  <p>Your name change has been granted. Obtain certified copies of the court order, then
+     update your identity with each agency below. Work through the tiers in order — items
+     within a tier can be done in parallel.</p>
 </div>
 
 {% for tier in plan %}

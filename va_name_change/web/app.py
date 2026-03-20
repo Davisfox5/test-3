@@ -18,7 +18,6 @@ from flask import (
     url_for,
 )
 
-from va_name_change.agents.efiling import can_efile, submit_efiling
 from va_name_change.agents.filing import (
     format_instructions,
     get_filing_instructions,
@@ -246,29 +245,13 @@ def intake_step4():
         )
         petition.advance(PetitionStatus.INTAKE)
 
-        # ── AUTO-GENERATE all forms ──
+        # ── AUTO-GENERATE all forms and prepare filing instructions ──
         generate_all_forms(petition)
+        prepare_filing(petition)
 
-        # ── AUTO-FILE: e-file for eligible courts, manual instructions otherwise ──
-        if can_efile(petition):
-            result = submit_efiling(petition)
-            if result.success:
-                petition.case_number = result.submission.case_number
-                petition.efiling_confirmation = result.submission.confirmation_code
-                petition.efiling_envelope_id = result.submission.envelope_id
-                if result.submission.hearing_date:
-                    petition.hearing_date = result.submission.hearing_date
-                flash(result.message, "success")
-            else:
-                # E-filing failed — fall back to manual
-                prepare_filing(petition)
-                flash(f"E-filing failed: {result.error or result.message}. "
-                      "Manual filing instructions shown below.", "error")
-        else:
-            prepare_filing(petition)
-            flash("Your petition has been created and all documents generated. "
-                  "This court does not accept e-filing — follow the manual filing "
-                  "instructions below.", "success")
+        flash("Your petition and all required documents have been generated. "
+              "Print, sign before a notary, and file with the court clerk.",
+              "success")
 
         store.save(petition)
 
@@ -335,12 +318,20 @@ def record_milestone(petition_id: str):
             flash("Filing confirmed. Waiting for hearing date.", "success")
 
         elif action == "hearing_scheduled":
-            hearing_raw = request.form.get("hearing_date", "").strip()
-            hearing_date = _parse_date(hearing_raw) if hearing_raw else None
-            if hearing_date:
-                petition.hearing_date = hearing_date
-            safe_advance(petition, PetitionStatus.HEARING_SCHEDULED)
-            flash("Hearing scheduled.", "success")
+            skip_to_granted = request.form.get("skip_to_granted", "")
+            if skip_to_granted == "yes":
+                # Court granted without a hearing (common for uncontested)
+                safe_advance(petition, PetitionStatus.HEARING_SCHEDULED)
+                safe_advance(petition, PetitionStatus.GRANTED)
+                flash("Congratulations! Your name change has been granted. "
+                      "Your post-decree update plan is ready below.", "success")
+            else:
+                hearing_raw = request.form.get("hearing_date", "").strip()
+                hearing_date = _parse_date(hearing_raw) if hearing_raw else None
+                if hearing_date:
+                    petition.hearing_date = hearing_date
+                safe_advance(petition, PetitionStatus.HEARING_SCHEDULED)
+                flash("Hearing scheduled.", "success")
 
         elif action == "hearing_outcome":
             outcome = request.form.get("outcome", "").lower()
