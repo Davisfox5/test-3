@@ -1,3 +1,589 @@
 [pytest logs]
 
-no tests ran in 0.00s
+==================================== ERRORS ====================================
+_____________________ ERROR collecting tests/test_forms.py _____________________
+ImportError while importing test module '/home/runner/work/test-3/test-3/tests/test_forms.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/hostedtoolcache/Python/3.9.25/x64/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_forms.py:6: in <module>
+    from va_name_change.agents.forms import generate_all_forms
+va_name_change/agents/forms.py:13: in <module>
+    import PyPDF2
+E   ModuleNotFoundError: No module named 'PyPDF2'
+=========================== short test summary info ============================
+ERROR tests/test_forms.py
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 error in 0.05s
+\n[TEST FILE: tests/__init__.py]:
+\n[TEST FILE: tests/test_filing.py]:
+"""Tests for the filing agent."""
+
+from datetime import date
+
+from va_name_change.agents.filing import format_instructions, prepare_filing
+from va_name_change.models import Address, NameChangePetition, PetitionStatus
+from va_name_change.utils.jurisdiction import resolve_jurisdiction
+
+
+def _petition(county: str) -> NameChangePetition:
+    addr = Address(street="1 St", city=county, county=county, zip_code="00000")
+    p = NameChangePetition(
+        current_legal_name="A B",
+        desired_name="C D",
+        dob=date(2000, 1, 1),
+        address=addr,
+        jurisdiction=resolve_jurisdiction(addr),
+    )
+    p.status = PetitionStatus.FORMS_READY
+    return p
+
+
+def test_efiling_jurisdiction():
+    p = _petition("Fairfax")
+    fi = prepare_filing(p)
+    assert fi.method == "efiling"
+    assert fi.efiling_url
+    assert p.status == PetitionStatus.FILED
+
+
+def test_in_person_jurisdiction():
+    p = _petition("Richmond City")
+    fi = prepare_filing(p)
+    assert fi.method == "in_person"
+    assert fi.efiling_url is None
+    assert p.status == PetitionStatus.FILED
+
+
+def test_format_instructions():
+    p = _petition("Fairfax")
+    fi = prepare_filing(p)
+    text = format_instructions(fi)
+    assert "EFILING" in text
+    assert "Fairfax" in text
+\n[TEST FILE: tests/test_forms.py]:
+"""Tests for the forms agent."""
+
+import os
+from datetime import date
+
+from va_name_change.agents.forms import generate_all_forms
+from va_name_change.models import (
+    Address,
+    DocumentType,
+    NameChangePetition,
+    PetitionStatus,
+)
+from va_name_change.utils.jurisdiction import resolve_jurisdiction
+
+
+def _make_petition() -> NameChangePetition:
+    addr = Address(street="123 Main St", city="Fairfax", county="Fairfax", zip_code="22030")
+    p = NameChangePetition(
+        current_legal_name="John Smith",
+        desired_name="Jane Smith",
+        reason="personal preference",
+        dob=date(1990, 1, 15),
+        ssn_encrypted="encrypted",
+        address=addr,
+        jurisdiction=resolve_jurisdiction(addr),
+    )
+    return p
+
+
+def test_generate_all_forms(tmp_path, monkeypatch):
+    monkeypatch.setattr("va_name_change.config.config.output_dir", str(tmp_path))
+    p = _make_petition()
+    docs = generate_all_forms(p)
+
+    assert len(docs) >= 3  # CC-1411, cover letter, publication, SS-5
+    assert p.status == PetitionStatus.FORMS_READY
+
+    doc_types = {d.doc_type for d in docs}
+    assert DocumentType.PETITION_CC1411 in doc_types
+    assert DocumentType.COVER_LETTER in doc_types
+    assert DocumentType.SSA_SS5 in doc_types
+
+    for doc in docs:
+        assert os.path.isfile(doc.file_path)
+        with open(doc.file_path) as f:
+            content = f.read()
+        assert "John Smith" in content or "Jane Smith" in content
+\n[TEST FILE: tests/test_intake.py]:
+"""Tests for the intake agent."""
+
+from collections import deque
+
+from va_name_change.agents.intake import run_intake
+from va_name_change.models import PetitionStatus
+
+
+def _make_ask(answers: list[str]):
+    """Return an ask function that pops answers from a list."""
+    q = deque(answers)
+
+    def ask(prompt: str) -> str:
+        return q.popleft()
+
+    return ask
+
+
+def test_full_intake():
+    answers = [
+        "John Smith",            # current legal name
+        "Jane Smith",            # desired name
+        "personal preference",   # reason
+        "01/15/1990",            # DOB
+        "123-45-6789",           # SSN
+        "123 Main St",           # street
+        "Fairfax",               # city
+        "Fairfax",               # county
+        "22030",                 # zip
+        "ok",                    # jurisdiction confirmation
+    ]
+    ask = _make_ask(answers)
+    petition = run_intake(ask)
+
+    assert petition.current_legal_name == "John Smith"
+    assert petition.desired_name == "Jane Smith"
+    assert petition.dob is not None
+    assert petition.address is not None
+    assert petition.jurisdiction is not None
+    assert "Fairfax" in petition.jurisdiction.name
+    assert petition.status == PetitionStatus.INTAKE
+    assert len(petition.downstream_updates) > 0
+\n[TEST FILE: tests/test_jurisdiction.py]:
+"""Tests for jurisdiction resolution."""
+
+import pytest
+
+from va_name_change.models import Address
+from va_name_change.utils.jurisdiction import (
+    JurisdictionError,
+    list_supported_jurisdictions,
+    resolve_jurisdiction,
+)
+
+
+def test_resolve_fairfax():
+    addr = Address(street="123 Main St", city="Fairfax", county="Fairfax", zip_code="22030")
+    court = resolve_jurisdiction(addr)
+    assert court.fips_code == "059"
+    assert "Fairfax" in court.name
+
+
+def test_resolve_case_insensitive():
+    addr = Address(street="1 St", city="Arlington", county="ARLINGTON", zip_code="22201")
+    court = resolve_jurisdiction(addr)
+    assert court.fips_code == "013"
+
+
+def test_resolve_unknown_raises():
+    addr = Address(street="1 St", city="Nowhere", county="Atlantis", zip_code="00000")
+    with pytest.raises(JurisdictionError):
+        resolve_jurisdiction(addr)
+
+
+def test_list_supported():
+    supported = list_supported_jurisdictions()
+    assert "fairfax" in supported
+    assert "richmond city" in supported
+    assert len(supported) >= 5
+\n[TEST FILE: tests/test_models.py]:
+"""Tests for core data models."""
+
+from datetime import date
+
+from va_name_change.models import (
+    Address,
+    DownstreamStatus,
+    DownstreamUpdate,
+    Document,
+    DocumentType,
+    NameChangePetition,
+    PetitionStatus,
+)
+
+
+def test_petition_defaults():
+    p = NameChangePetition()
+    assert p.status == PetitionStatus.INTAKE
+    assert p.documents == []
+    assert p.downstream_updates == []
+    assert len(p.petition_id) == 12
+
+
+def test_advance():
+    p = NameChangePetition()
+    p.advance(PetitionStatus.FORMS_READY)
+    assert p.status == PetitionStatus.FORMS_READY
+
+
+def test_add_document():
+    p = NameChangePetition()
+    doc = Document(doc_type=DocumentType.PETITION_CC1411, file_path="/tmp/test.txt")
+    p.add_document(doc)
+    assert len(p.documents) == 1
+    assert p.documents[0].doc_type == DocumentType.PETITION_CC1411
+
+
+def test_all_downstream_complete():
+    p = NameChangePetition()
+    p.downstream_updates = [
+        DownstreamUpdate(agency="SSA", status=DownstreamStatus.COMPLETED),
+        DownstreamUpdate(agency="DMV", status=DownstreamStatus.COMPLETED),
+    ]
+    assert p.all_downstream_complete() is True
+
+    p.downstream_updates.append(
+        DownstreamUpdate(agency="Passport", status=DownstreamStatus.PENDING)
+    )
+    assert p.all_downstream_complete() is False
+\n[TEST FILE: tests/test_post_decree.py]:
+"""Tests for the post-decree agent."""
+
+from va_name_change.agents.post_decree import (
+    build_update_plan,
+    format_plan,
+    mark_update_complete,
+)
+from va_name_change.models import (
+    DownstreamStatus,
+    DownstreamUpdate,
+    NameChangePetition,
+)
+
+
+def _petition_with_updates() -> NameChangePetition:
+    p = NameChangePetition()
+    p.downstream_updates = [
+        DownstreamUpdate(agency="SSA"),
+        DownstreamUpdate(agency="VA DMV", depends_on=["SSA"]),
+        DownstreamUpdate(agency="US Passport", depends_on=["SSA"]),
+        DownstreamUpdate(agency="Utilities"),
+    ]
+    return p
+
+
+def test_build_update_plan_tiers():
+    p = _petition_with_updates()
+    plan = build_update_plan(p)
+
+    # Tier 1 should contain SSA and Utilities (no dependencies)
+    tier1_agencies = {a.agency for a in plan[0]}
+    assert "Social Security Administration" in tier1_agencies or "SSA" in tier1_agencies
+    assert len(plan) >= 2
+
+
+def test_mark_update_complete():
+    p = _petition_with_updates()
+    result = mark_update_complete(p, "SSA")
+    assert result is not None
+    assert result.status == DownstreamStatus.COMPLETED
+
+
+def test_format_plan():
+    p = _petition_with_updates()
+    plan = build_update_plan(p)
+    text = format_plan(plan)
+    assert "TIER 1" in text
+    assert "TIER 2" in text
+\n[TEST FILE: tests/test_status_tracker.py]:
+"""Tests for the status tracker / state machine."""
+
+from datetime import date, timedelta
+
+import pytest
+
+from va_name_change.agents.status_tracker import (
+    InvalidTransitionError,
+    PetitionTimeline,
+    build_default_timeline,
+    format_timeline,
+    safe_advance,
+    validate_transition,
+)
+from va_name_change.models import NameChangePetition, PetitionStatus
+
+
+def test_valid_transitions():
+    validate_transition(PetitionStatus.INTAKE, PetitionStatus.FORMS_READY)
+    validate_transition(PetitionStatus.FILED, PetitionStatus.HEARING_SCHEDULED)
+    validate_transition(PetitionStatus.HEARING_SCHEDULED, PetitionStatus.GRANTED)
+
+
+def test_invalid_transition():
+    with pytest.raises(InvalidTransitionError):
+        validate_transition(PetitionStatus.INTAKE, PetitionStatus.GRANTED)
+
+
+def test_safe_advance():
+    p = NameChangePetition()
+    p.status = PetitionStatus.INTAKE
+    safe_advance(p, PetitionStatus.FORMS_READY)
+    assert p.status == PetitionStatus.FORMS_READY
+
+
+def test_safe_advance_invalid():
+    p = NameChangePetition()
+    p.status = PetitionStatus.INTAKE
+    with pytest.raises(InvalidTransitionError):
+        safe_advance(p, PetitionStatus.COMPLETED)
+
+
+def test_timeline_overdue():
+    tl = PetitionTimeline(petition_id="test")
+    tl.add("Past deadline", date.today() - timedelta(days=5))
+    tl.add("Future deadline", date.today() + timedelta(days=5))
+    assert len(tl.overdue()) == 1
+
+
+def test_timeline_upcoming():
+    tl = PetitionTimeline(petition_id="test")
+    tl.add("Soon", date.today() + timedelta(days=3))
+    tl.add("Far out", date.today() + timedelta(days=30))
+    upcoming = tl.upcoming(days=7)
+    assert len(upcoming) == 1
+
+
+def test_build_default_timeline():
+    p = NameChangePetition()
+    tl = build_default_timeline(p)
+    assert len(tl.deadlines) >= 5
+
+
+def test_format_timeline():
+    p = NameChangePetition()
+    tl = build_default_timeline(p)
+    text = format_timeline(tl)
+    assert "[ ]" in text
+    assert p.petition_id in text
+\n[TEST FILE: tests/test_va_code_monitor.py]:
+"""Tests for the VA Code monitor."""
+
+import json
+import os
+from unittest.mock import patch
+
+from va_name_change.agents.va_code_monitor import (
+    SectionSnapshot,
+    _load_baselines,
+    _save_baselines,
+    check_for_changes,
+)
+
+
+def test_save_and_load_baselines(tmp_path, monkeypatch):
+    baseline_file = str(tmp_path / ".va_code_baselines.json")
+    monkeypatch.setattr(
+        "va_name_change.agents.va_code_monitor._BASELINE_FILE", baseline_file
+    )
+
+    _save_baselines({"8.01-217": "abc123"})
+    loaded = _load_baselines()
+    assert loaded == {"8.01-217": "abc123"}
+
+
+def test_check_for_changes_detects_diff(tmp_path, monkeypatch):
+    """Simulate a content change by seeding a baseline then returning different text."""
+    baseline_file = str(tmp_path / ".va_code_baselines.json")
+    monkeypatch.setattr(
+        "va_name_change.agents.va_code_monitor._BASELINE_FILE", baseline_file
+    )
+
+    # Seed a baseline with a known hash
+    import hashlib
+    old_text = "old version of the statute"
+    old_hash = hashlib.sha256(old_text.encode()).hexdigest()
+    _save_baselines({"8.01-217": old_hash})
+
+    # Mock the fetch to return new text
+    new_text = "new amended version of the statute"
+    with patch(
+        "va_name_change.agents.va_code_monitor._fetch_section_text",
+        return_value=new_text,
+    ):
+        alerts = check_for_changes(sections=("8.01-217",))
+
+    assert len(alerts) == 1
+    assert alerts[0].section_id == "8.01-217"
+    assert alerts[0].old_hash == old_hash
+    assert alerts[0].new_hash != old_hash
+
+
+def test_check_for_changes_no_diff(tmp_path, monkeypatch):
+    """When content hasn't changed, no alerts should be emitted."""
+    baseline_file = str(tmp_path / ".va_code_baselines.json")
+    monkeypatch.setattr(
+        "va_name_change.agents.va_code_monitor._BASELINE_FILE", baseline_file
+    )
+
+    import hashlib
+    text = "unchanged statute text"
+    text_hash = hashlib.sha256(text.encode()).hexdigest()
+    _save_baselines({"8.01-217": text_hash})
+
+    with patch(
+        "va_name_change.agents.va_code_monitor._fetch_section_text",
+        return_value=text,
+    ):
+        alerts = check_for_changes(sections=("8.01-217",))
+
+    assert len(alerts) == 0
+\n[TEST FILE: tests/test_web.py]:
+"""Tests for the Flask web UI."""
+
+import pytest
+
+from va_name_change.web import create_app
+from va_name_change.web import store
+
+
+@pytest.fixture()
+def app():
+    app = create_app()
+    app.config["TESTING"] = True
+    # Clear store between tests
+    store._store.clear()
+    yield app
+
+
+@pytest.fixture()
+def client(app):
+    return app.test_client()
+
+
+def test_index(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"Virginia Name Change" in resp.data
+
+
+def test_intake_step1_get(client):
+    resp = client.get("/intake/step1")
+    assert resp.status_code == 200
+    assert b"Current Full Legal Name" in resp.data
+
+
+def test_intake_step1_post_validation(client):
+    resp = client.post("/intake/step1", data={
+        "current_name": "",
+        "desired_name": "",
+        "reason": "",
+    }, follow_redirects=True)
+    assert b"required" in resp.data.lower() or resp.status_code == 200
+
+
+def test_intake_step1_post_success(client):
+    resp = client.post("/intake/step1", data={
+        "current_name": "John Smith",
+        "desired_name": "Jane Smith",
+        "reason": "Personal preference",
+    })
+    assert resp.status_code == 302
+    assert "/intake/step2" in resp.headers["Location"]
+
+
+def test_intake_step2_requires_step1(client):
+    resp = client.get("/intake/step2")
+    assert resp.status_code == 302  # redirects to step1
+
+
+def test_full_intake_flow(client, monkeypatch, tmp_path):
+    monkeypatch.setattr("va_name_change.config.config.output_dir", str(tmp_path))
+
+    # Step 1
+    client.post("/intake/step1", data={
+        "current_name": "John Smith",
+        "desired_name": "Jane Smith",
+        "reason": "Personal preference",
+    })
+
+    # Step 2
+    client.post("/intake/step2", data={
+        "dob": "01/15/1990",
+        "ssn": "123-45-6789",
+    })
+
+    # Step 3
+    client.post("/intake/step3", data={
+        "street": "315 Church Ave SW",
+        "city": "Roanoke",
+        "county": "roanoke city",
+        "zip_code": "24016",
+    })
+
+    # Step 4 — confirm
+    resp = client.get("/intake/step4")
+    assert resp.status_code == 200
+    assert b"Roanoke City Circuit Court" in resp.data
+
+    resp = client.post("/intake/step4", follow_redirects=True)
+    assert resp.status_code == 200
+    assert b"Generated Documents" in resp.data or b"CC-1411" in resp.data
+
+
+def test_documents_page(client, monkeypatch, tmp_path):
+    monkeypatch.setattr("va_name_change.config.config.output_dir", str(tmp_path))
+
+    # Run full intake
+    client.post("/intake/step1", data={
+        "current_name": "A B", "desired_name": "C D", "reason": "Marriage",
+    })
+    client.post("/intake/step2", data={"dob": "2000-01-01", "ssn": "111223333"})
+    client.post("/intake/step3", data={
+        "street": "1 St", "city": "Salem", "county": "salem", "zip_code": "24153",
+    })
+    resp = client.post("/intake/step4", follow_redirects=False)
+
+    # Extract petition ID from redirect
+    location = resp.headers["Location"]
+    petition_id = location.split("/petition/")[1].split("/")[0]
+
+    resp = client.get(f"/petition/{petition_id}/documents")
+    assert resp.status_code == 200
+    assert b"CC-1411" in resp.data
+
+
+def test_status_page(client, monkeypatch, tmp_path):
+    monkeypatch.setattr("va_name_change.config.config.output_dir", str(tmp_path))
+
+    client.post("/intake/step1", data={
+        "current_name": "A B", "desired_name": "C D", "reason": "Marriage",
+    })
+    client.post("/intake/step2", data={"dob": "2000-01-01", "ssn": "111223333"})
+    client.post("/intake/step3", data={
+        "street": "1 St", "city": "Roanoke", "county": "roanoke county",
+        "zip_code": "24153",
+    })
+    resp = client.post("/intake/step4", follow_redirects=False)
+    petition_id = resp.headers["Location"].split("/petition/")[1].split("/")[0]
+
+    resp = client.get(f"/petition/{petition_id}/status")
+    assert resp.status_code == 200
+    assert b"Petition Status" in resp.data
+
+
+def test_404_for_unknown_petition(client):
+    resp = client.get("/petition/nonexistent/documents")
+    assert resp.status_code == 404
+
+
+def test_roanoke_jurisdictions_in_dropdown(client):
+    resp = client.get("/intake/step1")
+    # After step1, go to step3 to check dropdown
+    client.post("/intake/step1", data={
+        "current_name": "X", "desired_name": "Y", "reason": "Other",
+    })
+    client.post("/intake/step2", data={"dob": "2000-01-01", "ssn": "111223333"})
+    resp = client.get("/intake/step3")
+    assert resp.status_code == 200
+    # Check Roanoke-area jurisdictions are present
+    assert b"Roanoke City" in resp.data
+    assert b"Roanoke County" in resp.data
+    assert b"Salem" in resp.data
+    assert b"Botetourt" in resp.data
+    assert b"Craig" in resp.data
+    assert b"Bedford County" in resp.data
+    assert b"Franklin County" in resp.data

@@ -11,7 +11,10 @@ class AppConfig:
     """Runtime configuration — populated from env vars / dotenv."""
 
     # Directory where generated PDFs are stored
-    output_dir: str = os.getenv("VNC_OUTPUT_DIR", "./output")
+    output_dir: str = os.getenv(
+        "VNC_OUTPUT_DIR",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output"),
+    )
 
     # VA Code monitoring
     va_legislative_api_base: str = "https://law.lis.virginia.gov"

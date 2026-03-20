@@ -18,7 +18,7 @@
         <td>{{ doc.doc_type.value }}</td>
         <td>{{ doc.generated_at.strftime('%Y-%m-%d %H:%M') }}</td>
         <td>
-          {% set fname = doc.file_path.split('/')[-1] %}
+          {% set fname = doc.file_path.replace('\\', '/').split('/')[-1] %}
           <a href="{{ url_for('main.download_document', petition_id=petition.petition_id, filename=fname) }}"
              class="btn btn-sm">Download</a>
         </td>
