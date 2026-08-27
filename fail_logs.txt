@@ -15,7 +15,7 @@ E   ModuleNotFoundError: No module named 'PyPDF2'
 =========================== short test summary info ============================
 ERROR tests/test_forms.py
 !!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
-1 error in 0.06s
+1 error in 0.03s
 \n[TEST FILE: tests/__init__.py]:
 \n[TEST FILE: tests/test_filing.py]:
 """Tests for the filing agent."""
