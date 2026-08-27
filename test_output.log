@@ -14,4 +14,4 @@ E   ModuleNotFoundError: No module named 'PyPDF2'
 =========================== short test summary info ============================
 ERROR tests/test_forms.py
 !!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
-1 error in 0.06s
+1 error in 0.03s
